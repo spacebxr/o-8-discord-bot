@@ -97,6 +97,62 @@ func (b *Bot) Start() error {
 					Description: "Till when (d for day, h for hours, m for minutes)",
 					Required:    true,
 				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "reason",
+					Description: "Reason for the LOA",
+					Required:    true,
+				},
+			},
+		},
+		{
+			Name:        "roacreate",
+			Description: "Create a request for reduced activity (ROA)",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "from_when",
+					Description: "From when (d for day, h for hours, m for minutes)",
+					Required:    true,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "till_when",
+					Description: "Till when (d for day, h for hours, m for minutes)",
+					Required:    true,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "reason",
+					Description: "Reason for the ROA",
+					Required:    true,
+				},
+			},
+		},
+		{
+			Name:        "stopwatch",
+			Description: "Manage your activity stopwatch",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Name:        "start",
+					Description: "Start the stopwatch",
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+				},
+				{
+					Name:        "stop",
+					Description: "Stop the stopwatch",
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+				},
+				{
+					Name:        "status",
+					Description: "Check current stopwatch time",
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+				},
+				{
+					Name:        "reset",
+					Description: "Reset the stopwatch time",
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+				},
 			},
 		},
 	}
