@@ -64,7 +64,7 @@ func (b *Bot) InteractionCreateHandler(s *discordgo.Session, i *discordgo.Intera
 		switch i.ApplicationCommandData().Name {
 		case "infractioncreate":
 			b.handleInfractionCreateSlash(s, i)
-		case "loacreate":
+		case "loarequest":
 			b.handleLoaCreateSlash(s, i)
 		case "roacreate":
 			b.handleRoaCreateSlash(s, i)

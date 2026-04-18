@@ -80,7 +80,7 @@ func (b *Bot) Start() error {
 			},
 		},
 		{
-			Name:        "loacreate",
+			Name:        "loarequest",
 			Description: "Create a request for leave (LOA)",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
