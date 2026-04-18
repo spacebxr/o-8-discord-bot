@@ -8,13 +8,14 @@ import (
 )
 
 type Bot struct {
-	Session    *discordgo.Session
-	DB         *db.Database
-	GuildID    string
+	Session         *discordgo.Session
+	DB              *db.Database
+	GuildID         string
 	RoleHighCommand string
+	RoleDevTeam     string
 }
 
-func NewBot(token string, database *db.Database, guildID, roleHighCommand string) (*Bot, error) {
+func NewBot(token string, database *db.Database, guildID, roleHighCommand, roleDevTeam string) (*Bot, error) {
 	sess, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return nil, err
@@ -25,6 +26,7 @@ func NewBot(token string, database *db.Database, guildID, roleHighCommand string
 		DB:              database,
 		GuildID:         guildID,
 		RoleHighCommand: roleHighCommand,
+		RoleDevTeam:     roleDevTeam,
 	}
 
 	b.Session.AddHandler(b.ReadyHandler)
@@ -153,11 +155,9 @@ func (b *Bot) Start() error {
 		},
 	}
 
-	for _, cmd := range commands {
-		_, err := b.Session.ApplicationCommandCreate(b.Session.State.User.ID, b.GuildID, cmd)
-		if err != nil {
-			log.Printf("Cannot create '%v' command: %v", cmd.Name, err)
-		}
+	_, err = b.Session.ApplicationCommandBulkOverwrite(b.Session.State.User.ID, b.GuildID, commands)
+	if err != nil {
+		log.Printf("Cannot overwrite commands: %v", err)
 	}
 
 	return nil

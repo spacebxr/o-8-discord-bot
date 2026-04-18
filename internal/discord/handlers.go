@@ -13,6 +13,20 @@ func (b *Bot) ReadyHandler(s *discordgo.Session, r *discordgo.Ready) {
 	fmt.Println("Bot is up!")
 }
 
+func (b *Bot) hasAccess(member *discordgo.Member, allowedRoles ...string) bool {
+	for _, role := range member.Roles {
+		if role == b.RoleDevTeam {
+			return true
+		}
+		for _, allowed := range allowedRoles {
+			if role == allowed {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (b *Bot) InteractionCreateHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	switch i.Type {
 	case discordgo.InteractionApplicationCommand:
@@ -54,6 +68,17 @@ func (b *Bot) MessageCreateHandler(s *discordgo.Session, m *discordgo.MessageCre
 }
 
 func (b *Bot) handleInfractionCreateSlash(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	if !b.hasAccess(i.Member, b.RoleHighCommand) {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "You do not have the required role to file an infraction.",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		return
+	}
+
 	options := i.ApplicationCommandData().Options
 	var targetUser *discordgo.User
 	var severity int64
@@ -155,15 +180,7 @@ func (b *Bot) handleLoaCreateSlash(s *discordgo.Session, i *discordgo.Interactio
 }
 
 func (b *Bot) handleLoaComponent(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	hasPerm := false
-	for _, role := range i.Member.Roles {
-		if role == b.RoleHighCommand {
-			hasPerm = true
-			break
-		}
-	}
-
-	if !hasPerm {
+	if !b.hasAccess(i.Member, b.RoleHighCommand) {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -235,15 +252,7 @@ func (b *Bot) handleRoaCreateSlash(s *discordgo.Session, i *discordgo.Interactio
 }
 
 func (b *Bot) handleRoaComponent(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	hasPerm := false
-	for _, role := range i.Member.Roles {
-		if role == b.RoleHighCommand {
-			hasPerm = true
-			break
-		}
-	}
-
-	if !hasPerm {
+	if !b.hasAccess(i.Member, b.RoleHighCommand) {
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
