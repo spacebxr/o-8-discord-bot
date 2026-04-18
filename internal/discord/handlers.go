@@ -27,6 +27,37 @@ func (b *Bot) hasAccess(member *discordgo.Member, allowedRoles ...string) bool {
 	return false
 }
 
+func (b *Bot) sendEmbedResponse(s *discordgo.Session, i *discordgo.Interaction, title, description string, color int) {
+	s.InteractionRespond(i, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Title:       title,
+					Description: description,
+					Color:       color,
+				},
+			},
+		},
+	})
+}
+
+func (b *Bot) sendEmbedEphemeral(s *discordgo.Session, i *discordgo.Interaction, title, description string, color int) {
+	s.InteractionRespond(i, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Flags: discordgo.MessageFlagsEphemeral,
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Title:       title,
+					Description: description,
+					Color:       color,
+				},
+			},
+		},
+	})
+}
+
 func (b *Bot) InteractionCreateHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	switch i.Type {
 	case discordgo.InteractionApplicationCommand:
@@ -62,20 +93,18 @@ func (b *Bot) MessageCreateHandler(s *discordgo.Session, m *discordgo.MessageCre
 		}
 
 		if args[0] == "infractioncreate" {
-			s.ChannelMessageSend(m.ChannelID, "Please use the /infractioncreate slash command.")
+			s.ChannelMessageSendEmbed(m.ChannelID, &discordgo.MessageEmbed{
+				Title:       "Action Required",
+				Description: "Please use the `/infractioncreate` slash command.",
+				Color:       0xf23f43,
+			})
 		}
 	}
 }
 
 func (b *Bot) handleInfractionCreateSlash(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	if !b.hasAccess(i.Member, b.RoleHighCommand) {
-		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "You do not have the required role to file an infraction.",
-				Flags:   discordgo.MessageFlagsEphemeral,
-			},
-		})
+		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied", "You do not have the required role to file an infraction.", 0xf23f43)
 		return
 	}
 
@@ -106,34 +135,18 @@ func (b *Bot) handleInfractionCreateSlash(s *discordgo.Session, i *discordgo.Int
 
 	err := b.DB.InsertInfraction(context.Background(), userID, modID, int(severity), reason, whatPunishment, tillWhen)
 	if err != nil {
-		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "Failed to insert infraction.",
-			},
-		})
+		b.sendEmbedResponse(s, i.Interaction, "Error", "Failed to insert infraction into the database.", 0xf23f43)
 		return
 	}
 
 	count, err := b.DB.CountInfractions(context.Background(), userID)
 	if err != nil {
-		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "Infraction filed but failed to count.",
-			},
-		})
+		b.sendEmbedResponse(s, i.Interaction, "Warning", "Infraction filed but failed to retrieve total count.", 0xfaa61a)
 		return
 	}
 
-	responseMsg := fmt.Sprintf("Infraction filed for <@%s>. Total infractions: %d", userID, count)
-
-	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: responseMsg,
-		},
-	})
+	responseMsg := fmt.Sprintf("Infraction recorded for <@%s>.\n\n**Severity:** %d\n**Reason:** %s\n**Punishment:** %s\n**Total Infractions:** %d", userID, severity, reason, whatPunishment, count)
+	b.sendEmbedResponse(s, i.Interaction, "Infraction Filed", responseMsg, 0x23a559)
 }
 
 func (b *Bot) handleLoaCreateSlash(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -153,12 +166,18 @@ func (b *Bot) handleLoaCreateSlash(s *discordgo.Session, i *discordgo.Interactio
 		}
 	}
 
-	content := fmt.Sprintf("<@%s> requested a Leave of Absence from **%s** till **%s**\n**Reason:** %s", i.Member.User.ID, fromWhen, tillWhen, reason)
+	content := fmt.Sprintf("<@%s> is requesting a Leave of Absence.\n\n**From:** %s\n**To:** %s\n**Reason:** %s", i.Member.User.ID, fromWhen, tillWhen, reason)
 
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: content,
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Title:       "LOA Request",
+					Description: content,
+					Color:       0x5865F2,
+				},
+			},
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
 					Components: []discordgo.MessageComponent{
@@ -181,28 +200,26 @@ func (b *Bot) handleLoaCreateSlash(s *discordgo.Session, i *discordgo.Interactio
 
 func (b *Bot) handleLoaComponent(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	if !b.hasAccess(i.Member, b.RoleHighCommand) {
-		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "You do not have the required high command role to action this LOA.",
-				Flags:   discordgo.MessageFlagsEphemeral,
-			},
-		})
+		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied", "You do not have the required high command role to action this LOA.", 0xf23f43)
 		return
 	}
 
 	action := "Accepted"
+	color := 0x23a559
 	if i.MessageComponentData().CustomID == "loa_reject" {
 		action = "Rejected"
+		color = 0xf23f43
 	}
 
-	oldContent := i.Message.Content
-	newContent := fmt.Sprintf("%s\n\n**Status:** %s by <@%s>", oldContent, action, i.Member.User.ID)
+	embed := i.Message.Embeds[0]
+	embed.Title = "LOA Request - " + action
+	embed.Color = color
+	embed.Description += fmt.Sprintf("\n\n**Status:** %s by <@%s>", action, i.Member.User.ID)
 
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseUpdateMessage,
 		Data: &discordgo.InteractionResponseData{
-			Content:    newContent,
+			Embeds:     []*discordgo.MessageEmbed{embed},
 			Components: []discordgo.MessageComponent{},
 		},
 	})
@@ -225,12 +242,18 @@ func (b *Bot) handleRoaCreateSlash(s *discordgo.Session, i *discordgo.Interactio
 		}
 	}
 
-	content := fmt.Sprintf("<@%s> requested a Reduced on Activity from **%s** till **%s**\n**Reason:** %s", i.Member.User.ID, fromWhen, tillWhen, reason)
+	content := fmt.Sprintf("<@%s> is requesting Reduced on Activity.\n\n**From:** %s\n**To:** %s\n**Reason:** %s", i.Member.User.ID, fromWhen, tillWhen, reason)
 
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
-			Content: content,
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Title:       "ROA Request",
+					Description: content,
+					Color:       0xEBb026,
+				},
+			},
 			Components: []discordgo.MessageComponent{
 				discordgo.ActionsRow{
 					Components: []discordgo.MessageComponent{
@@ -253,28 +276,26 @@ func (b *Bot) handleRoaCreateSlash(s *discordgo.Session, i *discordgo.Interactio
 
 func (b *Bot) handleRoaComponent(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	if !b.hasAccess(i.Member, b.RoleHighCommand) {
-		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "You do not have the required high command role to action this ROA.",
-				Flags:   discordgo.MessageFlagsEphemeral,
-			},
-		})
+		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied", "You do not have the required high command role to action this ROA.", 0xf23f43)
 		return
 	}
 
 	action := "Accepted"
+	color := 0x23a559
 	if i.MessageComponentData().CustomID == "roa_reject" {
 		action = "Rejected"
+		color = 0xf23f43
 	}
 
-	oldContent := i.Message.Content
-	newContent := fmt.Sprintf("%s\n\n**Status:** %s by <@%s>", oldContent, action, i.Member.User.ID)
+	embed := i.Message.Embeds[0]
+	embed.Title = "ROA Request - " + action
+	embed.Color = color
+	embed.Description += fmt.Sprintf("\n\n**Status:** %s by <@%s>", action, i.Member.User.ID)
 
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseUpdateMessage,
 		Data: &discordgo.InteractionResponseData{
-			Content:    newContent,
+			Embeds:     []*discordgo.MessageEmbed{embed},
 			Components: []discordgo.MessageComponent{},
 		},
 	})
@@ -286,27 +307,36 @@ func (b *Bot) handleStopwatchSlash(s *discordgo.Session, i *discordgo.Interactio
 
 	ctx := context.Background()
 	userID := i.Member.User.ID
-	var content string
+	var title, content string
+	color := 0x5865F2
 
 	switch subcommand {
 	case "start":
+		title = "Stopwatch Started"
 		err := b.DB.StartStopwatch(ctx, userID)
 		if err != nil {
-			content = "Failed to start stopwatch or it is already running."
+			content = "Failed to start stopwatch. It might already be running."
+			color = 0xf23f43
 		} else {
-			content = "Stopwatch started!"
+			content = "Your activity stopwatch is now running."
+			color = 0x23a559
 		}
 	case "stop":
+		title = "Stopwatch Stopped"
 		total, err := b.DB.StopStopwatch(ctx, userID)
 		if err != nil {
-			content = "Failed to stop stopwatch or it is not running."
+			content = "Failed to stop stopwatch. It might not be running."
+			color = 0xf23f43
 		} else {
-			content = fmt.Sprintf("Stopwatch stopped! Total time: %s", formatDuration(total))
+			content = fmt.Sprintf("Stopwatch stopped!\n**Session/Total Time:** %s", formatDuration(total))
+			color = 0x23a559
 		}
 	case "status":
+		title = "Stopwatch Status"
 		startTime, total, err := b.DB.GetStopwatch(ctx, userID)
 		if err != nil {
 			content = "No recorded stopwatch data found."
+			color = 0xf23f43
 		} else {
 			current := total
 			status := "Stopped"
@@ -314,23 +344,21 @@ func (b *Bot) handleStopwatchSlash(s *discordgo.Session, i *discordgo.Interactio
 				current += int64(time.Since(*startTime).Seconds())
 				status = "Running"
 			}
-			content = fmt.Sprintf("Status: **%s**\nTotal Time: **%s**", status, formatDuration(current))
+			content = fmt.Sprintf("Current Status: **%s**\nAccumulated Time: **%s**", status, formatDuration(current))
 		}
 	case "reset":
+		title = "Stopwatch Reset"
 		err := b.DB.ResetStopwatch(ctx, userID)
 		if err != nil {
-			content = "Failed to reset stopwatch."
+			content = "Failed to reset stopwatch data."
+			color = 0xf23f43
 		} else {
-			content = "Stopwatch reset!"
+			content = "Your activity stopwatch has been reset to zero."
+			color = 0x23a559
 		}
 	}
 
-	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: content,
-		},
-	})
+	b.sendEmbedResponse(s, i.Interaction, title, content, color)
 }
 
 func formatDuration(seconds int64) string {
