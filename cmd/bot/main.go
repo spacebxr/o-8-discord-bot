@@ -21,8 +21,9 @@ func main() {
 	guildID := os.Getenv("GUILD_ID")
 	roleL4 := os.Getenv("ROLE_L4")
 	roleClassD := os.Getenv("ROLE_CLASSD")
+	roleHighCommand := os.Getenv("ROLE_HIGH_COMMAND")
 
-	if dbURL == "" || token == "" || guildID == "" || roleL4 == "" || roleClassD == "" {
+	if dbURL == "" || token == "" || guildID == "" || roleL4 == "" || roleClassD == "" || roleHighCommand == "" {
 		log.Fatal("Missing required environment variables")
 	}
 
@@ -32,7 +33,7 @@ func main() {
 	}
 	defer database.Pool.Close()
 
-	bot, err := discord.NewBot(token, database, guildID, roleL4, roleClassD)
+	bot, err := discord.NewBot(token, database, guildID, roleL4, roleClassD, roleHighCommand)
 	if err != nil {
 		log.Fatal("Failed to create bot:", err)
 	}
