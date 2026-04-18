@@ -11,12 +11,10 @@ type Bot struct {
 	Session    *discordgo.Session
 	DB         *db.Database
 	GuildID    string
-	RoleL4          string
-	RoleClassD      string
 	RoleHighCommand string
 }
 
-func NewBot(token string, database *db.Database, guildID, roleL4, roleClassD, roleHighCommand string) (*Bot, error) {
+func NewBot(token string, database *db.Database, guildID, roleHighCommand string) (*Bot, error) {
 	sess, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return nil, err
@@ -26,8 +24,6 @@ func NewBot(token string, database *db.Database, guildID, roleL4, roleClassD, ro
 		Session:         sess,
 		DB:              database,
 		GuildID:         guildID,
-		RoleL4:          roleL4,
-		RoleClassD:      roleClassD,
 		RoleHighCommand: roleHighCommand,
 	}
 

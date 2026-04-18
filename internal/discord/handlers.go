@@ -103,16 +103,6 @@ func (b *Bot) handleInfractionCreateSlash(s *discordgo.Session, i *discordgo.Int
 
 	responseMsg := fmt.Sprintf("Infraction filed for <@%s>. Total infractions: %d", userID, count)
 
-	if count >= 3 {
-		errAdd := s.GuildMemberRoleAdd(b.GuildID, userID, b.RoleClassD)
-		errRem := s.GuildMemberRoleRemove(b.GuildID, userID, b.RoleL4)
-		if errAdd != nil || errRem != nil {
-			responseMsg += "\nFailed to update roles."
-		} else {
-			responseMsg += "\nUser downgraded to Class-D."
-		}
-	}
-
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{

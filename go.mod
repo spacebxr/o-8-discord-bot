@@ -1,6 +1,6 @@
 module github.com/spacebxr/o-8-discord-bot
 
-go 1.26.2
+go 1.25.0
 
 require (
 	github.com/bwmarrin/discordgo v0.29.0
