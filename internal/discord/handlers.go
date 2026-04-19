@@ -102,9 +102,12 @@ func (b *Bot) MessageCreateHandler(s *discordgo.Session, m *discordgo.MessageCre
 	// Check if author was AFK
 	_, _, err := b.DB.GetAFK(context.Background(), m.Author.ID)
 	if err == nil {
-		// They had an AFK status
 		b.DB.RemoveAFK(context.Background(), m.Author.ID)
-		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Welcome back <@%s>, I've removed your AFK status.", m.Author.ID))
+		name := m.Author.GlobalName
+		if name == "" {
+			name = m.Author.Username
+		}
+		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Welcome back **%s**, your AFK status has been removed.", name))
 	}
 
 	// Check mentions
