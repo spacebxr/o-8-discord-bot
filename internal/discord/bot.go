@@ -104,7 +104,7 @@ func (b *Bot) Start() error {
 			},
 		},
 		{
-			Name:        "roacreate",
+			Name:        "roarequest",
 			Description: "Create a request for reduced activity (ROA)",
 			Options: []*discordgo.ApplicationCommandOption{
 				{

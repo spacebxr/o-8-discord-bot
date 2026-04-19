@@ -66,8 +66,8 @@ func (b *Bot) InteractionCreateHandler(s *discordgo.Session, i *discordgo.Intera
 			b.handleInfractionCreateSlash(s, i)
 		case "loarequest":
 			b.handleLoaCreateSlash(s, i)
-		case "roacreate":
-			b.handleRoaCreateSlash(s, i)
+		case "roarequest":
+			b.handleRoaRequestSlash(s, i)
 		case "stopwatch":
 			b.handleStopwatchSlash(s, i)
 		}
@@ -225,7 +225,7 @@ func (b *Bot) handleLoaComponent(s *discordgo.Session, i *discordgo.InteractionC
 	})
 }
 
-func (b *Bot) handleRoaCreateSlash(s *discordgo.Session, i *discordgo.InteractionCreate) {
+func (b *Bot) handleRoaRequestSlash(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	options := i.ApplicationCommandData().Options
 	var fromWhen string
 	var tillWhen string
