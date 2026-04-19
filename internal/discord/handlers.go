@@ -114,7 +114,11 @@ func (b *Bot) MessageCreateHandler(s *discordgo.Session, m *discordgo.MessageCre
 		}
 		if reason, since, err := b.DB.GetAFK(context.Background(), user.ID); err == nil {
 			durationStr := "<t:" + fmt.Sprint(since.Unix()) + ":R>"
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("<@%s> is currently AFK: **%s** - %s", user.ID, reason, durationStr))
+			name := user.GlobalName
+			if name == "" {
+				name = user.Username
+			}
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("**%s** is currently AFK: **%s** - %s", name, reason, durationStr))
 		}
 	}
 
@@ -527,7 +531,19 @@ func (b *Bot) handleAFKSlash(s *discordgo.Session, i *discordgo.InteractionCreat
 		reason = options[0].StringValue()
 	}
 
-	err := b.DB.SetAFK(context.Background(), i.Member.User.ID, reason)
+	var userID string
+	if i.Member != nil {
+		userID = i.Member.User.ID
+	} else if i.User != nil {
+		userID = i.User.ID
+	}
+
+	if userID == "" {
+		b.sendEmbedEphemeral(s, i.Interaction, "Error ❌", "User identification failed.", 0xf23f43)
+		return
+	}
+
+	err := b.DB.SetAFK(context.Background(), userID, reason)
 	if err != nil {
 		b.sendEmbedEphemeral(s, i.Interaction, "Error ❌", "Failed to set AFK status.", 0xf23f43)
 		return
