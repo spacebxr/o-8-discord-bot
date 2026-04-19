@@ -151,6 +151,35 @@ func (b *Bot) Start() error {
 					Description: "Reset the stopwatch time",
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
 				},
+		},
+		{
+			Name:        "requestcn",
+			Description: "Request a codename (CN)",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "roblox_username",
+					Description: "Your Roblox username",
+					Required:    true,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "codename",
+					Description: "Your desired codename",
+					Required:    true,
+				},
+			},
+		},
+		{
+			Name:        "afk",
+			Description: "Set your AFK status",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "reason",
+					Description: "Reason for being AFK",
+					Required:    false,
+				},
 			},
 		},
 	}

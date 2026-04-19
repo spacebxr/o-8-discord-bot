@@ -64,3 +64,43 @@ func (db *Database) ResetStopwatch(ctx context.Context, userID string) error {
 	_, err := db.Pool.Exec(ctx, "DELETE FROM stopwatches WHERE user_id = $1", userID)
 	return err
 }
+
+func (db *Database) IsCodenameTaken(ctx context.Context, codename string) (bool, error) {
+	var count int
+	err := db.Pool.QueryRow(ctx, "SELECT COUNT(*) FROM codenames WHERE codename = $1 AND status = 'approved'", codename).Scan(&count)
+	return count > 0, err
+}
+
+func (db *Database) InsertCodenameRequest(ctx context.Context, discordID, robloxUsername, codename string) (string, error) {
+	var id string
+	err := db.Pool.QueryRow(ctx,
+		"INSERT INTO codenames (discord_id, roblox_username, codename, status) VALUES ($1, $2, $3, 'pending') RETURNING id",
+		discordID, robloxUsername, codename,
+	).Scan(&id)
+	return id, err
+}
+
+func (db *Database) UpdateCodenameStatus(ctx context.Context, requestID, status string) error {
+	_, err := db.Pool.Exec(ctx, "UPDATE codenames SET status = $1 WHERE id = $2", status, requestID)
+	return err
+}
+
+func (db *Database) SetAFK(ctx context.Context, userID, reason string) error {
+	_, err := db.Pool.Exec(ctx,
+		"INSERT INTO afk_status (user_id, reason, since) VALUES ($1, $2, now()) ON CONFLICT (user_id) DO UPDATE SET reason = $2, since = now()",
+		userID, reason,
+	)
+	return err
+}
+
+func (db *Database) GetAFK(ctx context.Context, userID string) (string, time.Time, error) {
+	var reason string
+	var since time.Time
+	err := db.Pool.QueryRow(ctx, "SELECT reason, since FROM afk_status WHERE user_id = $1", userID).Scan(&reason, &since)
+	return reason, since, err
+}
+
+func (db *Database) RemoveAFK(ctx context.Context, userID string) error {
+	_, err := db.Pool.Exec(ctx, "DELETE FROM afk_status WHERE user_id = $1", userID)
+	return err
+}

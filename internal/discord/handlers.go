@@ -70,6 +70,10 @@ func (b *Bot) InteractionCreateHandler(s *discordgo.Session, i *discordgo.Intera
 			b.handleRoaRequestSlash(s, i)
 		case "stopwatch":
 			b.handleStopwatchSlash(s, i)
+		case "requestcn":
+			b.handleRequestCNSlash(s, i)
+		case "afk":
+			b.handleAFKSlash(s, i)
 		}
 	case discordgo.InteractionMessageComponent:
 		switch i.MessageComponentData().CustomID {
@@ -78,12 +82,34 @@ func (b *Bot) InteractionCreateHandler(s *discordgo.Session, i *discordgo.Intera
 		case "roa_accept", "roa_reject":
 			b.handleRoaComponent(s, i)
 		}
+		if strings.HasPrefix(i.MessageComponentData().CustomID, "cn_accept_") || strings.HasPrefix(i.MessageComponentData().CustomID, "cn_reject_") {
+			b.handleCNComponent(s, i)
+		}
 	}
 }
 
 func (b *Bot) MessageCreateHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if m.Author.ID == s.State.User.ID {
 		return
+	}
+
+	// Check if author was AFK
+	_, _, err := b.DB.GetAFK(context.Background(), m.Author.ID)
+	if err == nil {
+		// They had an AFK status
+		b.DB.RemoveAFK(context.Background(), m.Author.ID)
+		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Welcome back <@%s>, I've removed your AFK status.", m.Author.ID))
+	}
+
+	// Check mentions
+	for _, user := range m.Mentions {
+		if user.ID == m.Author.ID {
+			continue
+		}
+		if reason, since, err := b.DB.GetAFK(context.Background(), user.ID); err == nil {
+			durationStr := "<t:" + fmt.Sprint(since.Unix()) + ":R>"
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("<@%s> is currently AFK: **%s** - %s", user.ID, reason, durationStr))
+		}
 	}
 
 	if strings.HasPrefix(m.Content, "!") {
@@ -366,4 +392,128 @@ func formatDuration(seconds int64) string {
 	m := (seconds % 3600) / 60
 	s := seconds % 60
 	return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
+}
+
+func (b *Bot) handleRequestCNSlash(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	options := i.ApplicationCommandData().Options
+	var robloxUsername string
+	var codename string
+
+	for _, opt := range options {
+		switch opt.Name {
+		case "roblox_username":
+			robloxUsername = opt.StringValue()
+		case "codename":
+			codename = opt.StringValue()
+		}
+	}
+
+	taken, err := b.DB.IsCodenameTaken(context.Background(), codename)
+	if err != nil {
+		b.sendEmbedEphemeral(s, i.Interaction, "Database Error", "An error occurred while checking if the codename was taken.", 0xf23f43)
+		return
+	}
+	if taken {
+		b.sendEmbedEphemeral(s, i.Interaction, "Codename Unavailable", fmt.Sprintf("The codename **%s** is already taken by an approved user. Please request a different codename.", codename), 0xf23f43)
+		return
+	}
+
+	reqID, err := b.DB.InsertCodenameRequest(context.Background(), i.Member.User.ID, robloxUsername, codename)
+	if err != nil {
+		b.sendEmbedEphemeral(s, i.Interaction, "Database Error", "Failed to save your codename request.", 0xf23f43)
+		return
+	}
+
+	content := fmt.Sprintf("<@%s> is requesting a new Codename.\n\n**Roblox Username:** %s\n**Desired Codename:** %s", i.Member.User.ID, robloxUsername, codename)
+
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Title:       "Codename Request",
+					Description: content,
+					Color:       0x5865F2,
+				},
+			},
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.Button{
+							Label:    "Approve",
+							Style:    discordgo.SuccessButton,
+							CustomID: "cn_accept_" + reqID,
+						},
+						discordgo.Button{
+							Label:    "Deny",
+							Style:    discordgo.DangerButton,
+							CustomID: "cn_reject_" + reqID,
+						},
+					},
+				},
+			},
+		},
+	})
+}
+
+func (b *Bot) handleCNComponent(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	if !b.hasAccess(i.Member, b.RoleHighCommand) {
+		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied", "You do not have the required high command role to action this Codename request.", 0xf23f43)
+		return
+	}
+
+	customID := i.MessageComponentData().CustomID
+	var action, status string
+	var color int
+
+	var reqID string
+	if strings.HasPrefix(customID, "cn_accept_") {
+		action = "Approved"
+		status = "approved"
+		color = 0x23a559
+		reqID = strings.TrimPrefix(customID, "cn_accept_")
+	} else if strings.HasPrefix(customID, "cn_reject_") {
+		action = "Denied"
+		status = "denied"
+		color = 0xf23f43
+		reqID = strings.TrimPrefix(customID, "cn_reject_")
+	} else {
+		return
+	}
+
+	err := b.DB.UpdateCodenameStatus(context.Background(), reqID, status)
+	if err != nil {
+		b.sendEmbedEphemeral(s, i.Interaction, "Database Error", "Failed to update codename status.", 0xf23f43)
+		return
+	}
+
+	embed := i.Message.Embeds[0]
+	embed.Title = "Codename Request - " + action
+	embed.Color = color
+	embed.Description += fmt.Sprintf("\n\n**Status:** %s by <@%s>", action, i.Member.User.ID)
+
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseUpdateMessage,
+		Data: &discordgo.InteractionResponseData{
+			Embeds:     []*discordgo.MessageEmbed{embed},
+			Components: []discordgo.MessageComponent{},
+		},
+	})
+}
+
+func (b *Bot) handleAFKSlash(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	options := i.ApplicationCommandData().Options
+	reason := "AFK"
+
+	if len(options) > 0 {
+		reason = options[0].StringValue()
+	}
+
+	err := b.DB.SetAFK(context.Background(), i.Member.User.ID, reason)
+	if err != nil {
+		b.sendEmbedEphemeral(s, i.Interaction, "Error", "Failed to set AFK status.", 0xf23f43)
+		return
+	}
+
+	b.sendEmbedResponse(s, i.Interaction, "AFK Status", fmt.Sprintf("You are now AFK: **%s**", reason), 0x23a559)
 }
