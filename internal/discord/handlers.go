@@ -36,6 +36,9 @@ func (b *Bot) sendEmbedResponse(s *discordgo.Session, i *discordgo.Interaction, 
 					Title:       title,
 					Description: description,
 					Color:       color,
+					Thumbnail: &discordgo.MessageEmbedThumbnail{
+						URL: "https://i.ibb.co/67ZpGxTj/image.png",
+					},
 				},
 			},
 		},
@@ -52,6 +55,9 @@ func (b *Bot) sendEmbedEphemeral(s *discordgo.Session, i *discordgo.Interaction,
 					Title:       title,
 					Description: description,
 					Color:       color,
+					Thumbnail: &discordgo.MessageEmbedThumbnail{
+						URL: "https://i.ibb.co/67ZpGxTj/image.png",
+					},
 				},
 			},
 		},
@@ -120,9 +126,12 @@ func (b *Bot) MessageCreateHandler(s *discordgo.Session, m *discordgo.MessageCre
 
 		if args[0] == "infractioncreate" {
 			s.ChannelMessageSendEmbed(m.ChannelID, &discordgo.MessageEmbed{
-				Title:       "Action Required",
+				Title:       "Action Required ❗",
 				Description: "Please use the `/infractioncreate` slash command.",
 				Color:       0xf23f43,
+				Thumbnail: &discordgo.MessageEmbedThumbnail{
+					URL: "https://i.ibb.co/67ZpGxTj/image.png",
+				},
 			})
 		}
 	}
@@ -130,7 +139,7 @@ func (b *Bot) MessageCreateHandler(s *discordgo.Session, m *discordgo.MessageCre
 
 func (b *Bot) handleInfractionCreateSlash(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	if !b.hasAccess(i.Member, b.RoleHighCommand) {
-		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied", "You do not have the required role to file an infraction.", 0xf23f43)
+		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied 🚫", "You do not have the required role to file an infraction.", 0xf23f43)
 		return
 	}
 
@@ -161,18 +170,18 @@ func (b *Bot) handleInfractionCreateSlash(s *discordgo.Session, i *discordgo.Int
 
 	err := b.DB.InsertInfraction(context.Background(), userID, modID, int(severity), reason, whatPunishment, tillWhen)
 	if err != nil {
-		b.sendEmbedResponse(s, i.Interaction, "Error", "Failed to insert infraction into the database.", 0xf23f43)
+		b.sendEmbedResponse(s, i.Interaction, "Error ❌", "Failed to insert infraction into the database.", 0xf23f43)
 		return
 	}
 
 	count, err := b.DB.CountInfractions(context.Background(), userID)
 	if err != nil {
-		b.sendEmbedResponse(s, i.Interaction, "Warning", "Infraction filed but failed to retrieve total count.", 0xfaa61a)
+		b.sendEmbedResponse(s, i.Interaction, "Warning ⚠️", "Infraction filed but failed to retrieve total count.", 0xfaa61a)
 		return
 	}
 
 	responseMsg := fmt.Sprintf("Infraction recorded for <@%s>.\n\n**Severity:** %d\n**Reason:** %s\n**Punishment:** %s\n**Total Infractions:** %d", userID, severity, reason, whatPunishment, count)
-	b.sendEmbedResponse(s, i.Interaction, "Infraction Filed", responseMsg, 0x23a559)
+	b.sendEmbedResponse(s, i.Interaction, "Infraction Filed ✅", responseMsg, 0x23a559)
 }
 
 func (b *Bot) handleLoaCreateSlash(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -199,9 +208,12 @@ func (b *Bot) handleLoaCreateSlash(s *discordgo.Session, i *discordgo.Interactio
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{
 				{
-					Title:       "LOA Request",
+					Title:       "LOA Request 📝",
 					Description: content,
 					Color:       0x5865F2,
+					Thumbnail: &discordgo.MessageEmbedThumbnail{
+						URL: "https://i.ibb.co/67ZpGxTj/image.png",
+					},
 				},
 			},
 			Components: []discordgo.MessageComponent{
@@ -226,7 +238,7 @@ func (b *Bot) handleLoaCreateSlash(s *discordgo.Session, i *discordgo.Interactio
 
 func (b *Bot) handleLoaComponent(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	if !b.hasAccess(i.Member, b.RoleHighCommand) {
-		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied", "You do not have the required high command role to action this LOA.", 0xf23f43)
+		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied 🚫", "You do not have the required high command role to action this LOA.", 0xf23f43)
 		return
 	}
 
@@ -275,9 +287,12 @@ func (b *Bot) handleRoaRequestSlash(s *discordgo.Session, i *discordgo.Interacti
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{
 				{
-					Title:       "ROA Request",
+					Title:       "ROA Request 📝",
 					Description: content,
 					Color:       0xEBb026,
+					Thumbnail: &discordgo.MessageEmbedThumbnail{
+						URL: "https://i.ibb.co/67ZpGxTj/image.png",
+					},
 				},
 			},
 			Components: []discordgo.MessageComponent{
@@ -302,7 +317,7 @@ func (b *Bot) handleRoaRequestSlash(s *discordgo.Session, i *discordgo.Interacti
 
 func (b *Bot) handleRoaComponent(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	if !b.hasAccess(i.Member, b.RoleHighCommand) {
-		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied", "You do not have the required high command role to action this ROA.", 0xf23f43)
+		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied 🚫", "You do not have the required high command role to action this ROA.", 0xf23f43)
 		return
 	}
 
@@ -338,7 +353,7 @@ func (b *Bot) handleStopwatchSlash(s *discordgo.Session, i *discordgo.Interactio
 
 	switch subcommand {
 	case "start":
-		title = "Stopwatch Started"
+		title = "Stopwatch Started ⏱️"
 		err := b.DB.StartStopwatch(ctx, userID)
 		if err != nil {
 			content = "Failed to start stopwatch. It might already be running."
@@ -348,7 +363,7 @@ func (b *Bot) handleStopwatchSlash(s *discordgo.Session, i *discordgo.Interactio
 			color = 0x23a559
 		}
 	case "stop":
-		title = "Stopwatch Stopped"
+		title = "Stopwatch Stopped ⏹️"
 		total, err := b.DB.StopStopwatch(ctx, userID)
 		if err != nil {
 			content = "Failed to stop stopwatch. It might not be running."
@@ -358,7 +373,7 @@ func (b *Bot) handleStopwatchSlash(s *discordgo.Session, i *discordgo.Interactio
 			color = 0x23a559
 		}
 	case "status":
-		title = "Stopwatch Status"
+		title = "Stopwatch Status 📊"
 		startTime, total, err := b.DB.GetStopwatch(ctx, userID)
 		if err != nil {
 			content = "No recorded stopwatch data found."
@@ -373,7 +388,7 @@ func (b *Bot) handleStopwatchSlash(s *discordgo.Session, i *discordgo.Interactio
 			content = fmt.Sprintf("Current Status: **%s**\nAccumulated Time: **%s**", status, formatDuration(current))
 		}
 	case "reset":
-		title = "Stopwatch Reset"
+		title = "Stopwatch Reset ♻️"
 		err := b.DB.ResetStopwatch(ctx, userID)
 		if err != nil {
 			content = "Failed to reset stopwatch data."
@@ -410,17 +425,17 @@ func (b *Bot) handleRequestCNSlash(s *discordgo.Session, i *discordgo.Interactio
 
 	taken, err := b.DB.IsCodenameTaken(context.Background(), codename)
 	if err != nil {
-		b.sendEmbedEphemeral(s, i.Interaction, "Database Error", "An error occurred while checking if the codename was taken.", 0xf23f43)
+		b.sendEmbedEphemeral(s, i.Interaction, "Database Error ❌", "An error occurred while checking if the codename was taken.", 0xf23f43)
 		return
 	}
 	if taken {
-		b.sendEmbedEphemeral(s, i.Interaction, "Codename Unavailable", fmt.Sprintf("The codename **%s** is already taken by an approved user. Please request a different codename.", codename), 0xf23f43)
+		b.sendEmbedEphemeral(s, i.Interaction, "Codename Unavailable ⚠️", fmt.Sprintf("The codename **%s** is already taken by an approved user. Please request a different codename.", codename), 0xf23f43)
 		return
 	}
 
 	reqID, err := b.DB.InsertCodenameRequest(context.Background(), i.Member.User.ID, robloxUsername, codename)
 	if err != nil {
-		b.sendEmbedEphemeral(s, i.Interaction, "Database Error", "Failed to save your codename request.", 0xf23f43)
+		b.sendEmbedEphemeral(s, i.Interaction, "Database Error ❌", "Failed to save your codename request.", 0xf23f43)
 		return
 	}
 
@@ -431,9 +446,12 @@ func (b *Bot) handleRequestCNSlash(s *discordgo.Session, i *discordgo.Interactio
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{
 				{
-					Title:       "Codename Request",
+					Title:       "Codename Request 🏷️",
 					Description: content,
 					Color:       0x5865F2,
+					Thumbnail: &discordgo.MessageEmbedThumbnail{
+						URL: "https://i.ibb.co/67ZpGxTj/image.png",
+					},
 				},
 			},
 			Components: []discordgo.MessageComponent{
@@ -458,7 +476,7 @@ func (b *Bot) handleRequestCNSlash(s *discordgo.Session, i *discordgo.Interactio
 
 func (b *Bot) handleCNComponent(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	if !b.hasAccess(i.Member, b.RoleHighCommand) {
-		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied", "You do not have the required high command role to action this Codename request.", 0xf23f43)
+		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied 🚫", "You do not have the required high command role to action this Codename request.", 0xf23f43)
 		return
 	}
 
@@ -483,7 +501,7 @@ func (b *Bot) handleCNComponent(s *discordgo.Session, i *discordgo.InteractionCr
 
 	err := b.DB.UpdateCodenameStatus(context.Background(), reqID, status)
 	if err != nil {
-		b.sendEmbedEphemeral(s, i.Interaction, "Database Error", "Failed to update codename status.", 0xf23f43)
+		b.sendEmbedEphemeral(s, i.Interaction, "Database Error ❌", "Failed to update codename status.", 0xf23f43)
 		return
 	}
 
@@ -511,9 +529,9 @@ func (b *Bot) handleAFKSlash(s *discordgo.Session, i *discordgo.InteractionCreat
 
 	err := b.DB.SetAFK(context.Background(), i.Member.User.ID, reason)
 	if err != nil {
-		b.sendEmbedEphemeral(s, i.Interaction, "Error", "Failed to set AFK status.", 0xf23f43)
+		b.sendEmbedEphemeral(s, i.Interaction, "Error ❌", "Failed to set AFK status.", 0xf23f43)
 		return
 	}
 
-	b.sendEmbedResponse(s, i.Interaction, "AFK Status", fmt.Sprintf("You are now AFK: **%s**", reason), 0x23a559)
+	b.sendEmbedResponse(s, i.Interaction, "AFK Status 💤", fmt.Sprintf("You are now AFK: **%s**", reason), 0x23a559)
 }

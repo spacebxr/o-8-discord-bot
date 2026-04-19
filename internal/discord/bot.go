@@ -151,6 +151,7 @@ func (b *Bot) Start() error {
 					Description: "Reset the stopwatch time",
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
 				},
+			},
 		},
 		{
 			Name:        "requestcn",
