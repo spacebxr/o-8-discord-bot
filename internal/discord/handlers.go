@@ -570,7 +570,7 @@ func (b *Bot) handleAFKSlash(s *discordgo.Session, i *discordgo.InteractionCreat
 }
 
 func (b *Bot) handleAnnounceSlash(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	if !b.hasAccess(i.Member) {
+	if !b.hasAccess(i.Member, b.RoleHighCommand) {
 		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied", "You do not have the required role to make announcements.", 0xf23f43)
 		return
 	}
@@ -700,7 +700,7 @@ func (b *Bot) handleAnnounceDeployment(s *discordgo.Session, i *discordgo.Intera
 }
 
 func (b *Bot) handleDeployStart(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	if !b.hasAccess(i.Member) {
+	if !b.hasAccess(i.Member, b.RoleHighCommand) {
 		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied", "You do not have permission to manage deployments.", 0xf23f43)
 		return
 	}
@@ -734,7 +734,7 @@ func (b *Bot) handleDeployStart(s *discordgo.Session, i *discordgo.InteractionCr
 }
 
 func (b *Bot) handleDeployOngoing(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	if !b.hasAccess(i.Member) {
+	if !b.hasAccess(i.Member, b.RoleHighCommand) {
 		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied", "You do not have permission to manage deployments.", 0xf23f43)
 		return
 	}
@@ -765,7 +765,7 @@ func (b *Bot) handleDeployOngoing(s *discordgo.Session, i *discordgo.Interaction
 }
 
 func (b *Bot) handleDeployEnd(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	if !b.hasAccess(i.Member) {
+	if !b.hasAccess(i.Member, b.RoleHighCommand) {
 		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied", "You do not have permission to manage deployments.", 0xf23f43)
 		return
 	}
