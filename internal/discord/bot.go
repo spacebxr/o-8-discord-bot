@@ -2,6 +2,7 @@ package discord
 
 import (
 	"log"
+	"strings"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/spacebxr/o-8-discord-bot/internal/db"
@@ -11,8 +12,19 @@ type Bot struct {
 	Session         *discordgo.Session
 	DB              *db.Database
 	GuildID         string
-	RoleHighCommand string
-	RoleDevTeam     string
+	RoleHighCommand []string
+	RoleDevTeam     []string
+}
+
+func splitRoles(s string) []string {
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if trimmed := strings.TrimSpace(p); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }
 
 func NewBot(token string, database *db.Database, guildID, roleHighCommand, roleDevTeam string) (*Bot, error) {
@@ -25,8 +37,8 @@ func NewBot(token string, database *db.Database, guildID, roleHighCommand, roleD
 		Session:         sess,
 		DB:              database,
 		GuildID:         guildID,
-		RoleHighCommand: roleHighCommand,
-		RoleDevTeam:     roleDevTeam,
+		RoleHighCommand: splitRoles(roleHighCommand),
+		RoleDevTeam:     splitRoles(roleDevTeam),
 	}
 
 	b.Session.AddHandler(b.ReadyHandler)

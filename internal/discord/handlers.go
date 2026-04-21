@@ -15,10 +15,12 @@ func (b *Bot) ReadyHandler(s *discordgo.Session, r *discordgo.Ready) {
 	fmt.Println("Bot is up!")
 }
 
-func (b *Bot) hasAccess(member *discordgo.Member, allowedRoles ...string) bool {
+func (b *Bot) hasAccess(member *discordgo.Member, allowedRoles []string) bool {
 	for _, role := range member.Roles {
-		if role == b.RoleDevTeam {
-			return true
+		for _, devRole := range b.RoleDevTeam {
+			if role == devRole {
+				return true
+			}
 		}
 		for _, allowed := range allowedRoles {
 			if role == allowed {
