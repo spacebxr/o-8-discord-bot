@@ -183,6 +183,62 @@ func (b *Bot) Start() error {
 				},
 			},
 		},
+		{
+			Name:        "announce",
+			Description: "Make an announcement",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Name:        "message",
+					Description: "Send a normal announcement message",
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "text",
+							Description: "The announcement message",
+							Required:    true,
+						},
+					},
+				},
+				{
+					Name:        "deployment",
+					Description: "Schedule a deployment",
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "message",
+							Description: "Deployment details / message",
+							Required:    true,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionUser,
+							Name:        "host",
+							Description: "Host of the deployment",
+							Required:    true,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionUser,
+							Name:        "cohost",
+							Description: "Co-host of the deployment",
+							Required:    true,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "participants",
+							Description: "Mention participants (@user @user ...)",
+							Required:    true,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "location",
+							Description: "Location of the deployment",
+							Required:    true,
+						},
+					},
+				},
+			},
+		},
 	}
 
 	_, err = b.Session.ApplicationCommandBulkOverwrite(b.Session.State.User.ID, b.GuildID, commands)

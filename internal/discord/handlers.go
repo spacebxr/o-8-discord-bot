@@ -9,6 +9,8 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+var deploymentStartTimes = map[string]time.Time{}
+
 func (b *Bot) ReadyHandler(s *discordgo.Session, r *discordgo.Ready) {
 	fmt.Println("Bot is up!")
 }
@@ -80,16 +82,28 @@ func (b *Bot) InteractionCreateHandler(s *discordgo.Session, i *discordgo.Intera
 			b.handleRequestCNSlash(s, i)
 		case "afk":
 			b.handleAFKSlash(s, i)
+		case "announce":
+			b.handleAnnounceSlash(s, i)
 		}
 	case discordgo.InteractionMessageComponent:
-		switch i.MessageComponentData().CustomID {
+		cid := i.MessageComponentData().CustomID
+		switch cid {
 		case "loa_accept", "loa_reject":
 			b.handleLoaComponent(s, i)
 		case "roa_accept", "roa_reject":
 			b.handleRoaComponent(s, i)
 		}
-		if strings.HasPrefix(i.MessageComponentData().CustomID, "cn_accept_") || strings.HasPrefix(i.MessageComponentData().CustomID, "cn_reject_") {
+		if strings.HasPrefix(cid, "cn_accept_") || strings.HasPrefix(cid, "cn_reject_") {
 			b.handleCNComponent(s, i)
+		}
+		if strings.HasPrefix(cid, "deploy_start_") {
+			b.handleDeployStart(s, i)
+		}
+		if strings.HasPrefix(cid, "deploy_ongoing_") {
+			b.handleDeployOngoing(s, i)
+		}
+		if strings.HasPrefix(cid, "deploy_end_") {
+			b.handleDeployEnd(s, i)
 		}
 	}
 }
@@ -553,4 +567,259 @@ func (b *Bot) handleAFKSlash(s *discordgo.Session, i *discordgo.InteractionCreat
 	}
 
 	b.sendEmbedResponse(s, i.Interaction, "AFK Status 💤", fmt.Sprintf("You are now AFK: **%s**", reason), 0x23a559)
+}
+
+func (b *Bot) handleAnnounceSlash(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	if !b.hasAccess(i.Member) {
+		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied", "You do not have the required role to make announcements.", 0xf23f43)
+		return
+	}
+
+	sub := i.ApplicationCommandData().Options[0]
+	switch sub.Name {
+	case "message":
+		b.handleAnnounceMessage(s, i, sub)
+	case "deployment":
+		b.handleAnnounceDeployment(s, i, sub)
+	}
+}
+
+func (b *Bot) handleAnnounceMessage(s *discordgo.Session, i *discordgo.InteractionCreate, sub *discordgo.ApplicationCommandInteractionDataOption) {
+	var text string
+	for _, opt := range sub.Options {
+		if opt.Name == "text" {
+			text = opt.StringValue()
+		}
+	}
+
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Title:       "Announcement",
+					Description: text,
+					Color:       0x5865F2,
+					Footer: &discordgo.MessageEmbedFooter{
+						Text: "Announced by " + i.Member.User.Username,
+					},
+					Timestamp: time.Now().UTC().Format(time.RFC3339),
+					Thumbnail: &discordgo.MessageEmbedThumbnail{
+						URL: "https://i.ibb.co/67ZpGxTj/image.png",
+					},
+				},
+			},
+		},
+	})
+}
+
+func (b *Bot) handleAnnounceDeployment(s *discordgo.Session, i *discordgo.InteractionCreate, sub *discordgo.ApplicationCommandInteractionDataOption) {
+	var message, participants, location string
+	var hostUser, cohostUser *discordgo.User
+
+	for _, opt := range sub.Options {
+		switch opt.Name {
+		case "message":
+			message = opt.StringValue()
+		case "host":
+			hostUser = opt.UserValue(s)
+		case "cohost":
+			cohostUser = opt.UserValue(s)
+		case "participants":
+			participants = opt.StringValue()
+		case "location":
+			location = opt.StringValue()
+		}
+	}
+
+	hostMention := "Unknown"
+	if hostUser != nil {
+		hostMention = "<@" + hostUser.ID + ">"
+	}
+	cohostMention := "Unknown"
+	if cohostUser != nil {
+		cohostMention = "<@" + cohostUser.ID + ">"
+	}
+
+	description := fmt.Sprintf(
+		"%s\n\n**Host:** %s\n**Co-Host:** %s\n**Participants:** %s\n**Location:** %s",
+		message, hostMention, cohostMention, participants, location,
+	)
+
+	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Title:       "Deployment Scheduled",
+					Description: description,
+					Color:       0xFAA61A,
+					Timestamp:   time.Now().UTC().Format(time.RFC3339),
+					Thumbnail: &discordgo.MessageEmbedThumbnail{
+						URL: "https://i.ibb.co/67ZpGxTj/image.png",
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		return
+	}
+
+	msg, err := s.InteractionResponse(i.Interaction)
+	if err != nil {
+		return
+	}
+
+	s.ChannelMessageEditComplex(&discordgo.MessageEdit{
+		Channel: msg.ChannelID,
+		ID:      msg.ID,
+		Embeds: &[]*discordgo.MessageEmbed{
+			{
+				Title:       "Deployment Scheduled",
+				Description: description,
+				Color:       0xFAA61A,
+				Timestamp:   time.Now().UTC().Format(time.RFC3339),
+				Thumbnail: &discordgo.MessageEmbedThumbnail{
+					URL: "https://i.ibb.co/67ZpGxTj/image.png",
+				},
+			},
+		},
+		Components: &[]discordgo.MessageComponent{
+			discordgo.ActionsRow{
+				Components: []discordgo.MessageComponent{
+					discordgo.Button{
+						Label:    "Start Deployment",
+						Style:    discordgo.SuccessButton,
+						CustomID: "deploy_start_" + msg.ID,
+					},
+				},
+			},
+		},
+	})
+}
+
+func (b *Bot) handleDeployStart(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	if !b.hasAccess(i.Member) {
+		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied", "You do not have permission to manage deployments.", 0xf23f43)
+		return
+	}
+
+	msgID := strings.TrimPrefix(i.MessageComponentData().CustomID, "deploy_start_")
+	startTime := time.Now().UTC()
+	deploymentStartTimes[msgID] = startTime
+
+	embed := i.Message.Embeds[0]
+	embed.Title = "Deployment Started"
+	embed.Color = 0x23a559
+	embed.Description += fmt.Sprintf("\n\n**Started:** <t:%d:F>", startTime.Unix())
+
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseUpdateMessage,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.Button{
+							Label:    "Status: Ongoing",
+							Style:    discordgo.PrimaryButton,
+							CustomID: "deploy_ongoing_" + msgID,
+						},
+					},
+				},
+			},
+		},
+	})
+}
+
+func (b *Bot) handleDeployOngoing(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	if !b.hasAccess(i.Member) {
+		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied", "You do not have permission to manage deployments.", 0xf23f43)
+		return
+	}
+
+	msgID := strings.TrimPrefix(i.MessageComponentData().CustomID, "deploy_ongoing_")
+
+	embed := i.Message.Embeds[0]
+	embed.Title = "Deployment Ongoing"
+	embed.Color = 0x5865F2
+
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseUpdateMessage,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.Button{
+							Label:    "End Deployment",
+							Style:    discordgo.DangerButton,
+							CustomID: "deploy_end_" + msgID,
+						},
+					},
+				},
+			},
+		},
+	})
+}
+
+func (b *Bot) handleDeployEnd(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	if !b.hasAccess(i.Member) {
+		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied", "You do not have permission to manage deployments.", 0xf23f43)
+		return
+	}
+
+	msgID := strings.TrimPrefix(i.MessageComponentData().CustomID, "deploy_end_")
+	endTime := time.Now().UTC()
+
+	var durationStr string
+	if startTime, ok := deploymentStartTimes[msgID]; ok {
+		duration := endTime.Sub(startTime)
+		h := int(duration.Hours())
+		m := int(duration.Minutes()) % 60
+		sec := int(duration.Seconds()) % 60
+		durationStr = fmt.Sprintf("%02dh %02dm %02ds", h, m, sec)
+		delete(deploymentStartTimes, msgID)
+	} else {
+		durationStr = "Unknown"
+	}
+
+	embed := i.Message.Embeds[0]
+	embed.Title = "Deployment Ended"
+	embed.Color = 0xf23f43
+
+	var startDisplay string
+	for _, field := range embed.Fields {
+		if field.Name == "Started" {
+			startDisplay = field.Value
+		}
+	}
+
+	if startDisplay == "" {
+		if startTime, ok := deploymentStartTimes[msgID]; ok {
+			startDisplay = fmt.Sprintf("<t:%d:F>", startTime.Unix())
+		}
+	}
+
+	embed.Fields = append(embed.Fields,
+		&discordgo.MessageEmbedField{
+			Name:   "End Time",
+			Value:  fmt.Sprintf("<t:%d:F>", endTime.Unix()),
+			Inline: true,
+		},
+		&discordgo.MessageEmbedField{
+			Name:   "Duration",
+			Value:  durationStr,
+			Inline: true,
+		},
+	)
+
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseUpdateMessage,
+		Data: &discordgo.InteractionResponseData{
+			Embeds:     []*discordgo.MessageEmbed{embed},
+			Components: []discordgo.MessageComponent{},
+		},
+	})
 }
