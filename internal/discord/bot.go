@@ -44,6 +44,8 @@ func NewBot(token string, database *db.Database, guildID, roleHighCommand, roleD
 	b.Session.AddHandler(b.ReadyHandler)
 	b.Session.AddHandler(b.InteractionCreateHandler)
 	b.Session.AddHandler(b.MessageCreateHandler)
+	b.Session.AddHandler(b.MessageReactionAddHandler)
+	b.Session.AddHandler(b.MessageReactionRemoveHandler)
 
 	return b, nil
 }
@@ -66,9 +68,9 @@ func (b *Bot) Start() error {
 					Required:    true,
 				},
 				{
-					Type:        discordgo.ApplicationCommandOptionInteger,
-					Name:        "severity",
-					Description: "Severity of the infraction",
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "punishment",
+					Description: "The punishment applied",
 					Required:    true,
 				},
 				{
@@ -79,15 +81,27 @@ func (b *Bot) Start() error {
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
-					Name:        "what",
-					Description: "What punishment",
-					Required:    true,
+					Name:        "appeal_due",
+					Description: "Due date of appeal",
+					Required:    false,
 				},
 				{
-					Type:        discordgo.ApplicationCommandOptionString,
-					Name:        "till_when",
-					Description: "Till when they are having the punishment",
-					Required:    true,
+					Type:        discordgo.ApplicationCommandOptionAttachment,
+					Name:        "image",
+					Description: "Optional image attachment for proof",
+					Required:    false,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionRole,
+					Name:        "add_role",
+					Description: "Role to add to the user",
+					Required:    false,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionRole,
+					Name:        "remove_role",
+					Description: "Role to remove from the user",
+					Required:    false,
 				},
 			},
 		},

@@ -168,30 +168,46 @@ func (b *Bot) handleInfractionCreateSlash(s *discordgo.Session, i *discordgo.Int
 
 	options := i.ApplicationCommandData().Options
 	var targetUser *discordgo.User
-	var severity int64
+	var punishment string
 	var reason string
-	var whatPunishment string
-	var tillWhen string
+	var appealDue string
+	var imageAttachment *discordgo.MessageAttachment
+	var addRoleID string
+	var removeRoleID string
 
 	for _, opt := range options {
 		switch opt.Name {
 		case "user":
 			targetUser = opt.UserValue(s)
-		case "severity":
-			severity = opt.IntValue()
+		case "punishment":
+			punishment = opt.StringValue()
 		case "reason":
 			reason = opt.StringValue()
-		case "what":
-			whatPunishment = opt.StringValue()
-		case "till_when":
-			tillWhen = opt.StringValue()
+		case "appeal_due":
+			appealDue = opt.StringValue()
+		case "image":
+			attID := opt.Value.(string)
+			if i.ApplicationCommandData().Resolved != nil {
+				if att, ok := i.ApplicationCommandData().Resolved.Attachments[attID]; ok {
+					imageAttachment = att
+				}
+			}
+		case "add_role":
+			addRoleID = opt.Value.(string)
+		case "remove_role":
+			removeRoleID = opt.Value.(string)
 		}
 	}
 
 	modID := i.Member.User.ID
 	userID := targetUser.ID
 
-	err := b.DB.InsertInfraction(context.Background(), userID, modID, int(severity), reason, whatPunishment, tillWhen)
+	var imageURL string
+	if imageAttachment != nil {
+		imageURL = imageAttachment.URL
+	}
+
+	err := b.DB.InsertInfraction(context.Background(), userID, modID, punishment, reason, appealDue, imageURL, addRoleID, removeRoleID)
 	if err != nil {
 		b.sendEmbedResponse(s, i.Interaction, "Error ❌", "Failed to insert infraction into the database.", 0xf23f43)
 		return
@@ -203,8 +219,60 @@ func (b *Bot) handleInfractionCreateSlash(s *discordgo.Session, i *discordgo.Int
 		return
 	}
 
-	responseMsg := fmt.Sprintf("Infraction recorded for <@%s>.\n\n**Severity:** %d\n**Reason:** %s\n**Punishment:** %s\n**Total Infractions:** %d", userID, severity, reason, whatPunishment, count)
-	b.sendEmbedResponse(s, i.Interaction, "Infraction Filed ✅", responseMsg, 0x23a559)
+	appealDueText := "None"
+	if appealDue != "" {
+		appealDueText = appealDue
+	}
+
+	var roleOps []string
+	if addRoleID != "" {
+		err := s.GuildMemberRoleAdd(i.GuildID, userID, addRoleID)
+		if err != nil {
+			roleOps = append(roleOps, fmt.Sprintf("Failed to add <@&%s>: %v", addRoleID, err))
+		} else {
+			roleOps = append(roleOps, fmt.Sprintf("Added <@&%s>", addRoleID))
+		}
+	}
+	if removeRoleID != "" {
+		err := s.GuildMemberRoleRemove(i.GuildID, userID, removeRoleID)
+		if err != nil {
+			roleOps = append(roleOps, fmt.Sprintf("Failed to remove <@&%s>: %v", removeRoleID, err))
+		} else {
+			roleOps = append(roleOps, fmt.Sprintf("Removed <@&%s>", removeRoleID))
+		}
+	}
+
+	var roleOpsStr string
+	if len(roleOps) > 0 {
+		roleOpsStr = "\n\n**Role Operations:**\n" + strings.Join(roleOps, "\n")
+	}
+
+	responseMsg := fmt.Sprintf("Infraction recorded for <@%s>.\n\n**Punishment:** %s\n**Reason:** %s\n**Appeal Due:** %s\n**Total Infractions:** %d%s", userID, punishment, reason, appealDueText, count, roleOpsStr)
+
+	var embedImage *discordgo.MessageEmbedImage
+	if imageAttachment != nil {
+		embedImage = &discordgo.MessageEmbedImage{
+			URL: imageAttachment.URL,
+		}
+	}
+
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: fmt.Sprintf("<@%s>", userID),
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Title:       "Infraction Filed ✅",
+					Description: responseMsg,
+					Color:       0x23a559,
+					Image:       embedImage,
+					Thumbnail: &discordgo.MessageEmbedThumbnail{
+						URL: "https://i.ibb.co/67ZpGxTj/image.png",
+					},
+				},
+			},
+		},
+	})
 }
 
 func (b *Bot) handleLoaCreateSlash(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -229,6 +297,7 @@ func (b *Bot) handleLoaCreateSlash(s *discordgo.Session, i *discordgo.Interactio
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
+			Content: fmt.Sprintf("<@%s>", i.Member.User.ID),
 			Embeds: []*discordgo.MessageEmbed{
 				{
 					Title:       "LOA Request 📝",
@@ -308,6 +377,7 @@ func (b *Bot) handleRoaRequestSlash(s *discordgo.Session, i *discordgo.Interacti
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
+			Content: fmt.Sprintf("<@%s>", i.Member.User.ID),
 			Embeds: []*discordgo.MessageEmbed{
 				{
 					Title:       "ROA Request 📝",
@@ -467,6 +537,7 @@ func (b *Bot) handleRequestCNSlash(s *discordgo.Session, i *discordgo.Interactio
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
+			Content: fmt.Sprintf("<@%s>", i.Member.User.ID),
 			Embeds: []*discordgo.MessageEmbed{
 				{
 					Title:       "Codename Request 🏷️",
@@ -648,9 +719,22 @@ func (b *Bot) handleAnnounceDeployment(s *discordgo.Session, i *discordgo.Intera
 		message, hostMention, cohostMention, participants, location,
 	)
 
+	var pings []string
+	if hostUser != nil {
+		pings = append(pings, "<@"+hostUser.ID+">")
+	}
+	if cohostUser != nil {
+		pings = append(pings, "<@"+cohostUser.ID+">")
+	}
+	if participants != "" {
+		pings = append(pings, participants)
+	}
+	pingsStr := strings.Join(pings, " ")
+
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
+			Content: pingsStr,
 			Embeds: []*discordgo.MessageEmbed{
 				{
 					Title:       "Deployment Scheduled",
@@ -676,6 +760,7 @@ func (b *Bot) handleAnnounceDeployment(s *discordgo.Session, i *discordgo.Intera
 	s.ChannelMessageEditComplex(&discordgo.MessageEdit{
 		Channel: msg.ChannelID,
 		ID:      msg.ID,
+		Content: &pingsStr,
 		Embeds: &[]*discordgo.MessageEmbed{
 			{
 				Title:       "Deployment Scheduled",
@@ -699,6 +784,7 @@ func (b *Bot) handleAnnounceDeployment(s *discordgo.Session, i *discordgo.Intera
 			},
 		},
 	})
+	s.MessageReactionAdd(msg.ChannelID, msg.ID, "✅")
 }
 
 func (b *Bot) handleDeployStart(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -823,5 +909,132 @@ func (b *Bot) handleDeployEnd(s *discordgo.Session, i *discordgo.InteractionCrea
 			Embeds:     []*discordgo.MessageEmbed{embed},
 			Components: []discordgo.MessageComponent{},
 		},
+	})
+}
+
+func (b *Bot) MessageReactionAddHandler(s *discordgo.Session, ev *discordgo.MessageReactionAdd) {
+	if ev.UserID == s.State.User.ID {
+		return
+	}
+	if ev.Emoji.Name != "✅" {
+		return
+	}
+
+	msg, err := s.ChannelMessage(ev.ChannelID, ev.MessageID)
+	if err != nil {
+		return
+	}
+
+	if len(msg.Embeds) == 0 {
+		return
+	}
+
+	embed := msg.Embeds[0]
+	if embed.Title != "Deployment Scheduled" && embed.Title != "Deployment Started" && embed.Title != "Deployment Ongoing" {
+		return
+	}
+
+	userMention := fmt.Sprintf("<@%s>", ev.UserID)
+	lines := strings.Split(embed.Description, "\n")
+	updated := false
+
+	for idx, line := range lines {
+		if strings.HasPrefix(line, "**Participants:**") {
+			parts := strings.TrimPrefix(line, "**Participants:**")
+			parts = strings.TrimSpace(parts)
+			if !strings.Contains(parts, userMention) {
+				if parts == "" || parts == "None" {
+					parts = userMention
+				} else {
+					parts = parts + " " + userMention
+				}
+				lines[idx] = "**Participants:** " + parts
+				updated = true
+			}
+		}
+	}
+
+	if !updated {
+		return
+	}
+
+	embed.Description = strings.Join(lines, "\n")
+
+	content := msg.Content
+	if !strings.Contains(content, userMention) {
+		if content == "" {
+			content = userMention
+		} else {
+			content = content + " " + userMention
+		}
+	}
+
+	s.ChannelMessageEditComplex(&discordgo.MessageEdit{
+		Channel:    msg.ChannelID,
+		ID:         msg.ID,
+		Content:    &content,
+		Embeds:     &msg.Embeds,
+		Components: &msg.Components,
+	})
+}
+
+func (b *Bot) MessageReactionRemoveHandler(s *discordgo.Session, ev *discordgo.MessageReactionRemove) {
+	if ev.UserID == s.State.User.ID {
+		return
+	}
+	if ev.Emoji.Name != "✅" {
+		return
+	}
+
+	msg, err := s.ChannelMessage(ev.ChannelID, ev.MessageID)
+	if err != nil {
+		return
+	}
+
+	if len(msg.Embeds) == 0 {
+		return
+	}
+
+	embed := msg.Embeds[0]
+	if embed.Title != "Deployment Scheduled" && embed.Title != "Deployment Started" && embed.Title != "Deployment Ongoing" {
+		return
+	}
+
+	userMention := fmt.Sprintf("<@%s>", ev.UserID)
+	lines := strings.Split(embed.Description, "\n")
+	updated := false
+
+	for idx, line := range lines {
+		if strings.HasPrefix(line, "**Participants:**") {
+			parts := strings.TrimPrefix(line, "**Participants:**")
+			parts = strings.TrimSpace(parts)
+			if strings.Contains(parts, userMention) {
+				parts = strings.ReplaceAll(parts, userMention, "")
+				parts = strings.TrimSpace(strings.ReplaceAll(parts, "  ", " "))
+				if parts == "" {
+					parts = "None"
+				}
+				lines[idx] = "**Participants:** " + parts
+				updated = true
+			}
+		}
+	}
+
+	if !updated {
+		return
+	}
+
+	embed.Description = strings.Join(lines, "\n")
+
+	content := msg.Content
+	content = strings.ReplaceAll(content, userMention, "")
+	content = strings.TrimSpace(strings.ReplaceAll(content, "  ", " "))
+
+	s.ChannelMessageEditComplex(&discordgo.MessageEdit{
+		Channel:    msg.ChannelID,
+		ID:         msg.ID,
+		Content:    &content,
+		Embeds:     &msg.Embeds,
+		Components: &msg.Components,
 	})
 }

@@ -19,10 +19,10 @@ func Connect(ctx context.Context, dbURL string) (*Database, error) {
 	return &Database{Pool: pool}, nil
 }
 
-func (db *Database) InsertInfraction(ctx context.Context, userID, modID string, severity int, reason, whatPunishment, tillWhen string) error {
+func (db *Database) InsertInfraction(ctx context.Context, userID, modID, punishment, reason, appealDue, imageURL, addedRole, removedRole string) error {
 	_, err := db.Pool.Exec(ctx,
-		"INSERT INTO infractions (user_id, mod_id, severity, reason, what_punishment, till_when) VALUES ($1, $2, $3, $4, $5, $6)",
-		userID, modID, severity, reason, whatPunishment, tillWhen,
+		"INSERT INTO infractions (user_id, mod_id, punishment, reason, appeal_due, image_url, added_role, removed_role) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+		userID, modID, punishment, reason, appealDue, imageURL, addedRole, removedRole,
 	)
 	return err
 }
