@@ -593,16 +593,25 @@ func (b *Bot) handleCNComponent(s *discordgo.Session, i *discordgo.InteractionCr
 		return
 	}
 
-	err := b.DB.UpdateCodenameStatus(context.Background(), reqID, status)
+	discordID, codename, err := b.DB.UpdateCodenameStatus(context.Background(), reqID, status)
 	if err != nil {
 		b.sendEmbedEphemeral(s, i.Interaction, "Database Error ❌", "Failed to update codename status.", 0xf23f43)
 		return
+	}
+
+	var nickErr error
+	if status == "approved" {
+		nickname := fmt.Sprintf("[LR] %q", codename)
+		nickErr = s.GuildMemberNickname(i.GuildID, discordID, nickname)
 	}
 
 	embed := i.Message.Embeds[0]
 	embed.Title = "Codename Request - " + action
 	embed.Color = color
 	embed.Description += fmt.Sprintf("\n\n**Status:** %s by <@%s>", action, i.Member.User.ID)
+	if nickErr != nil {
+		embed.Description += fmt.Sprintf("\n⚠️ **Failed to change nickname:** %v", nickErr)
+	}
 
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseUpdateMessage,

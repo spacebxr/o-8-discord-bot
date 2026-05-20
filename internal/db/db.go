@@ -80,9 +80,10 @@ func (db *Database) InsertCodenameRequest(ctx context.Context, discordID, roblox
 	return id, err
 }
 
-func (db *Database) UpdateCodenameStatus(ctx context.Context, requestID, status string) error {
-	_, err := db.Pool.Exec(ctx, "UPDATE codenames SET status = $1 WHERE id = $2", status, requestID)
-	return err
+func (db *Database) UpdateCodenameStatus(ctx context.Context, requestID, status string) (string, string, error) {
+	var discordID, codename string
+	err := db.Pool.QueryRow(ctx, "UPDATE codenames SET status = $1 WHERE id = $2 RETURNING discord_id, codename", status, requestID).Scan(&discordID, &codename)
+	return discordID, codename, err
 }
 
 func (db *Database) SetAFK(ctx context.Context, userID, reason string) error {
