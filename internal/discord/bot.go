@@ -46,6 +46,7 @@ func NewBot(token string, database *db.Database, guildID, roleHighCommand, roleD
 	b.Session.AddHandler(b.MessageCreateHandler)
 	b.Session.AddHandler(b.MessageReactionAddHandler)
 	b.Session.AddHandler(b.MessageReactionRemoveHandler)
+	b.Session.AddHandler(b.GuildMemberUpdateHandler)
 
 	return b, nil
 }

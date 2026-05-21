@@ -1297,3 +1297,10 @@ func (b *Bot) checkExpiredLeaves() {
 		_ = b.DB.MarkLeaveNotified(ctx, leave.ID)
 	}
 }
+
+func (b *Bot) GuildMemberUpdateHandler(s *discordgo.Session, ev *discordgo.GuildMemberUpdate) {
+	if ev.Member == nil || ev.Member.User == nil {
+		return
+	}
+	_ = b.DB.UpsertUserRoles(context.Background(), ev.Member.User.ID, ev.Member.Roles)
+}

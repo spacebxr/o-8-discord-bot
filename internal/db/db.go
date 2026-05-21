@@ -189,3 +189,17 @@ func (db *Database) MarkLeaveNotified(ctx context.Context, id string) error {
 	_, err := db.Pool.Exec(ctx, "UPDATE loa_roa SET notified = TRUE WHERE id = $1", id)
 	return err
 }
+
+func (db *Database) UpsertUserRoles(ctx context.Context, userID string, roleIDs []string) error {
+	_, err := db.Pool.Exec(ctx,
+		"INSERT INTO user_roles (user_id, role_ids, updated_at) VALUES ($1, $2, now()) ON CONFLICT (user_id) DO UPDATE SET role_ids = $2, updated_at = now()",
+		userID, roleIDs,
+	)
+	return err
+}
+
+func (db *Database) GetUserRoles(ctx context.Context, userID string) ([]string, error) {
+	var roleIDs []string
+	err := db.Pool.QueryRow(ctx, "SELECT role_ids FROM user_roles WHERE user_id = $1", userID).Scan(&roleIDs)
+	return roleIDs, err
+}
