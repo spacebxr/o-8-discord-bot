@@ -681,7 +681,11 @@ func (b *Bot) handleCNComponent(s *discordgo.Session, i *discordgo.InteractionCr
 	embed.Color = color
 	embed.Description += fmt.Sprintf("\n\n**Status:** %s by <@%s>", action, i.Member.User.ID)
 	if nickErr != nil {
-		embed.Description += fmt.Sprintf("\n⚠️ **Failed to change nickname:** %v", nickErr)
+		if strings.Contains(nickErr.Error(), "50013") || strings.Contains(nickErr.Error(), "Missing Permissions") || strings.Contains(nickErr.Error(), "403") {
+			embed.Description += "\n\n⚠️ **Nickname Sync Notice:** The bot was unable to change this member's server nickname. This happens if the member is the Server Owner or has a higher role than the bot. To fix this, drag the bot's role higher in Server Settings."
+		} else {
+			embed.Description += fmt.Sprintf("\n\n⚠️ **Failed to change nickname:** %v", nickErr)
+		}
 	}
 
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
