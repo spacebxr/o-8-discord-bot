@@ -993,7 +993,7 @@ func (b *Bot) handleDeployEnd(s *discordgo.Session, i *discordgo.InteractionCrea
 	channels, err := s.GuildChannels(i.GuildID)
 	if err == nil {
 		for _, ch := range channels {
-			if ch.Name == "deployment-logs" {
+			if ch.Name == "💻‖deployments-logs" {
 				logChannelID = ch.ID
 				break
 			}
@@ -1274,7 +1274,7 @@ func (b *Bot) checkExpiredLeaves() {
 	channels, err := b.Session.GuildChannels(b.GuildID)
 	if err == nil {
 		for _, ch := range channels {
-			if ch.Name == "loa-roa-logs" {
+			if ch.Name == "🛫‖loa-request" {
 				logChannelID = ch.ID
 				break
 			}
