@@ -1328,9 +1328,11 @@ func (b *Bot) handleSyncRolesSlash(s *discordgo.Session, i *discordgo.Interactio
 
 	var allMembers []*discordgo.Member
 	after := ""
+	var fetchErr error
 	for {
 		m, err := s.GuildMembers(i.GuildID, after, 1000)
 		if err != nil {
+			fetchErr = err
 			break
 		}
 		if len(m) == 0 {
@@ -1349,10 +1351,21 @@ func (b *Bot) handleSyncRolesSlash(s *discordgo.Session, i *discordgo.Interactio
 		}
 	}
 
+	title := "Sync Completed Successfully"
+	color := 0x23a559
+	var desc string
+	if fetchErr != nil {
+		title = "Sync Partial Success / Error"
+		color = 0xf23f43
+		desc = fmt.Sprintf("Synced **%d** roles metadata, but failed to fetch guild members:\n`%v`\n\n*Please ensure that the **Server Members Intent** is enabled in the Discord Developer Portal for this bot token!*", len(roles), fetchErr)
+	} else {
+		desc = fmt.Sprintf("Synced **%d** roles and **%d** member role lists to the database.", len(roles), len(allMembers))
+	}
+
 	embed := &discordgo.MessageEmbed{
-		Title:       "Sync Completed Successfully",
-		Description: fmt.Sprintf("Synced **%d** roles and **%d** member role lists to the database.", len(roles), len(allMembers)),
-		Color:       0x23a559,
+		Title:       title,
+		Description: desc,
+		Color:       color,
 		Timestamp:   time.Now().UTC().Format(time.RFC3339),
 		Thumbnail: &discordgo.MessageEmbedThumbnail{
 			URL: "https://i.ibb.co/67ZpGxTj/image.png",

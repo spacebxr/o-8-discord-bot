@@ -33,6 +33,8 @@ func NewBot(token string, database *db.Database, guildID, roleHighCommand, roleD
 		return nil, err
 	}
 
+	sess.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMembers | discordgo.IntentsGuildMessages | discordgo.IntentsGuildMessageReactions
+
 	b := &Bot{
 		Session:         sess,
 		DB:              database,
