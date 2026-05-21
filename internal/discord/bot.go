@@ -106,6 +106,18 @@ func (b *Bot) Start() error {
 			},
 		},
 		{
+			Name:        "infractionhistory",
+			Description: "Search infraction history for a user",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionUser,
+					Name:        "user",
+					Description: "The user to get infractions for",
+					Required:    true,
+				},
+			},
+		},
+		{
 			Name:        "loarequest",
 			Description: "Create a request for leave (LOA)",
 			Options: []*discordgo.ApplicationCommandOption{
@@ -271,6 +283,8 @@ func (b *Bot) Start() error {
 	if err != nil {
 		log.Printf("Cannot overwrite commands: %v", err)
 	}
+
+	go b.startExpiryChecker()
 
 	return nil
 }

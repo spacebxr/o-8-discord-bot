@@ -105,3 +105,87 @@ func (db *Database) RemoveAFK(ctx context.Context, userID string) error {
 	_, err := db.Pool.Exec(ctx, "DELETE FROM afk_status WHERE user_id = $1", userID)
 	return err
 }
+
+type Infraction struct {
+	ID          string
+	UserID      string
+	ModID       string
+	Punishment  string
+	Reason      string
+	AppealDue   *string
+	ImageURL    *string
+	AddedRole   *string
+	RemovedRole *string
+	CreatedAt   time.Time
+}
+
+func (db *Database) GetInfractions(ctx context.Context, userID string) ([]Infraction, error) {
+	rows, err := db.Pool.Query(ctx, "SELECT id, user_id, mod_id, punishment, reason, appeal_due, image_url, added_role, removed_role, created_at FROM infractions WHERE user_id = $1 ORDER BY created_at DESC", userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []Infraction
+	for rows.Next() {
+		var inf Infraction
+		err := rows.Scan(&inf.ID, &inf.UserID, &inf.ModID, &inf.Punishment, &inf.Reason, &inf.AppealDue, &inf.ImageURL, &inf.AddedRole, &inf.RemovedRole, &inf.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, inf)
+	}
+	return list, rows.Err()
+}
+
+func (db *Database) InsertLoaRoaRequest(ctx context.Context, userID, requestType, fromWhen, tillWhen, reason string) (string, error) {
+	var id string
+	err := db.Pool.QueryRow(ctx,
+		"INSERT INTO loa_roa (user_id, type, from_when, till_when, reason, status) VALUES ($1, $2, $3, $4, $5, 'pending') RETURNING id",
+		userID, requestType, fromWhen, tillWhen, reason,
+	).Scan(&id)
+	return id, err
+}
+
+func (db *Database) GetLoaRoaRequest(ctx context.Context, id string) (string, string, string, error) {
+	var userID, reqType, tillWhen string
+	err := db.Pool.QueryRow(ctx, "SELECT user_id, type, till_when FROM loa_roa WHERE id = $1", id).Scan(&userID, &reqType, &tillWhen)
+	return userID, reqType, tillWhen, err
+}
+
+func (db *Database) UpdateLoaRoaStatus(ctx context.Context, requestID, status string, expiresAt *time.Time) (string, string, error) {
+	var userID, requestType string
+	err := db.Pool.QueryRow(ctx,
+		"UPDATE loa_roa SET status = $1, expires_at = $2 WHERE id = $3 RETURNING user_id, type",
+		status, expiresAt, requestID,
+	).Scan(&userID, &requestType)
+	return userID, requestType, err
+}
+
+type ExpiredLeave struct {
+	ID     string
+	UserID string
+	Type   string
+}
+
+func (db *Database) GetExpiredLeaves(ctx context.Context) ([]ExpiredLeave, error) {
+	rows, err := db.Pool.Query(ctx, "SELECT id, user_id, type FROM loa_roa WHERE status = 'approved' AND expires_at <= now() AND notified = FALSE")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []ExpiredLeave
+	for rows.Next() {
+		var el ExpiredLeave
+		err := rows.Scan(&el.ID, &el.UserID, &el.Type)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, el)
+	}
+	return list, rows.Err()
+}
+
+func (db *Database) MarkLeaveNotified(ctx context.Context, id string) error {
+	_, err := db.Pool.Exec(ctx, "UPDATE loa_roa SET notified = TRUE WHERE id = $1", id)
+	return err
+}

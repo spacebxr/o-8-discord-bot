@@ -74,6 +74,8 @@ func (b *Bot) InteractionCreateHandler(s *discordgo.Session, i *discordgo.Intera
 		switch i.ApplicationCommandData().Name {
 		case "infractioncreate":
 			b.handleInfractionCreateSlash(s, i)
+		case "infractionhistory":
+			b.handleInfractionHistorySlash(s, i)
 		case "loarequest":
 			b.handleLoaCreateSlash(s, i)
 		case "roarequest":
@@ -89,10 +91,9 @@ func (b *Bot) InteractionCreateHandler(s *discordgo.Session, i *discordgo.Intera
 		}
 	case discordgo.InteractionMessageComponent:
 		cid := i.MessageComponentData().CustomID
-		switch cid {
-		case "loa_accept", "loa_reject":
+		if cid == "loa_accept" || cid == "loa_reject" || strings.HasPrefix(cid, "loa_accept_") || strings.HasPrefix(cid, "loa_reject_") {
 			b.handleLoaComponent(s, i)
-		case "roa_accept", "roa_reject":
+		} else if cid == "roa_accept" || cid == "roa_reject" || strings.HasPrefix(cid, "roa_accept_") || strings.HasPrefix(cid, "roa_reject_") {
 			b.handleRoaComponent(s, i)
 		}
 		if strings.HasPrefix(cid, "cn_accept_") || strings.HasPrefix(cid, "cn_reject_") {
@@ -292,6 +293,12 @@ func (b *Bot) handleLoaCreateSlash(s *discordgo.Session, i *discordgo.Interactio
 		}
 	}
 
+	reqID, err := b.DB.InsertLoaRoaRequest(context.Background(), i.Member.User.ID, "LOA", fromWhen, tillWhen, reason)
+	if err != nil {
+		b.sendEmbedEphemeral(s, i.Interaction, "Database Error ❌", "Failed to save LOA request.", 0xf23f43)
+		return
+	}
+
 	content := fmt.Sprintf("<@%s> is requesting a Leave of Absence.\n\n**From:** %s\n**To:** %s\n**Reason:** %s", i.Member.User.ID, fromWhen, tillWhen, reason)
 
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -314,12 +321,12 @@ func (b *Bot) handleLoaCreateSlash(s *discordgo.Session, i *discordgo.Interactio
 						discordgo.Button{
 							Label:    "Accept",
 							Style:    discordgo.SuccessButton,
-							CustomID: "loa_accept",
+							CustomID: "loa_accept_" + reqID,
 						},
 						discordgo.Button{
 							Label:    "Reject",
 							Style:    discordgo.DangerButton,
-							CustomID: "loa_reject",
+							CustomID: "loa_reject_" + reqID,
 						},
 					},
 				},
@@ -334,11 +341,39 @@ func (b *Bot) handleLoaComponent(s *discordgo.Session, i *discordgo.InteractionC
 		return
 	}
 
-	action := "Accepted"
-	color := 0x23a559
-	if i.MessageComponentData().CustomID == "loa_reject" {
+	cid := i.MessageComponentData().CustomID
+	var reqID, action, status string
+	var color int
+
+	if strings.HasPrefix(cid, "loa_accept_") {
+		reqID = strings.TrimPrefix(cid, "loa_accept_")
+		action = "Accepted"
+		status = "approved"
+		color = 0x23a559
+	} else if strings.HasPrefix(cid, "loa_reject_") {
+		reqID = strings.TrimPrefix(cid, "loa_reject_")
 		action = "Rejected"
+		status = "rejected"
 		color = 0xf23f43
+	} else {
+		return
+	}
+
+	var expiresAt *time.Time
+	if status == "approved" {
+		_, _, tillWhen, err := b.DB.GetLoaRoaRequest(context.Background(), reqID)
+		if err == nil {
+			if dur, ok := parseDuration(tillWhen); ok {
+				exp := time.Now().Add(dur)
+				expiresAt = &exp
+			}
+		}
+	}
+
+	_, _, err := b.DB.UpdateLoaRoaStatus(context.Background(), reqID, status, expiresAt)
+	if err != nil {
+		b.sendEmbedEphemeral(s, i.Interaction, "Database Error ❌", "Failed to update LOA status in database.", 0xf23f43)
+		return
 	}
 
 	embed := i.Message.Embeds[0]
@@ -372,6 +407,12 @@ func (b *Bot) handleRoaRequestSlash(s *discordgo.Session, i *discordgo.Interacti
 		}
 	}
 
+	reqID, err := b.DB.InsertLoaRoaRequest(context.Background(), i.Member.User.ID, "ROA", fromWhen, tillWhen, reason)
+	if err != nil {
+		b.sendEmbedEphemeral(s, i.Interaction, "Database Error ❌", "Failed to save ROA request.", 0xf23f43)
+		return
+	}
+
 	content := fmt.Sprintf("<@%s> is requesting Reduced on Activity.\n\n**From:** %s\n**To:** %s\n**Reason:** %s", i.Member.User.ID, fromWhen, tillWhen, reason)
 
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
@@ -394,12 +435,12 @@ func (b *Bot) handleRoaRequestSlash(s *discordgo.Session, i *discordgo.Interacti
 						discordgo.Button{
 							Label:    "Accept",
 							Style:    discordgo.SuccessButton,
-							CustomID: "roa_accept",
+							CustomID: "roa_accept_" + reqID,
 						},
 						discordgo.Button{
 							Label:    "Reject",
 							Style:    discordgo.DangerButton,
-							CustomID: "roa_reject",
+							CustomID: "roa_reject_" + reqID,
 						},
 					},
 				},
@@ -414,11 +455,39 @@ func (b *Bot) handleRoaComponent(s *discordgo.Session, i *discordgo.InteractionC
 		return
 	}
 
-	action := "Accepted"
-	color := 0x23a559
-	if i.MessageComponentData().CustomID == "roa_reject" {
+	cid := i.MessageComponentData().CustomID
+	var reqID, action, status string
+	var color int
+
+	if strings.HasPrefix(cid, "roa_accept_") {
+		reqID = strings.TrimPrefix(cid, "roa_accept_")
+		action = "Accepted"
+		status = "approved"
+		color = 0x23a559
+	} else if strings.HasPrefix(cid, "roa_reject_") {
+		reqID = strings.TrimPrefix(cid, "roa_reject_")
 		action = "Rejected"
+		status = "rejected"
 		color = 0xf23f43
+	} else {
+		return
+	}
+
+	var expiresAt *time.Time
+	if status == "approved" {
+		_, _, tillWhen, err := b.DB.GetLoaRoaRequest(context.Background(), reqID)
+		if err == nil {
+			if dur, ok := parseDuration(tillWhen); ok {
+				exp := time.Now().Add(dur)
+				expiresAt = &exp
+			}
+		}
+	}
+
+	_, _, err := b.DB.UpdateLoaRoaStatus(context.Background(), reqID, status, expiresAt)
+	if err != nil {
+		b.sendEmbedEphemeral(s, i.Interaction, "Database Error ❌", "Failed to update ROA status in database.", 0xf23f43)
+		return
 	}
 
 	embed := i.Message.Embeds[0]
@@ -919,6 +988,29 @@ func (b *Bot) handleDeployEnd(s *discordgo.Session, i *discordgo.InteractionCrea
 			Components: []discordgo.MessageComponent{},
 		},
 	})
+
+	var logChannelID string
+	channels, err := s.GuildChannels(i.GuildID)
+	if err == nil {
+		for _, ch := range channels {
+			if ch.Name == "deployment-logs" {
+				logChannelID = ch.ID
+				break
+			}
+		}
+	}
+	if logChannelID != "" {
+		_, _ = s.ChannelMessageSendEmbed(logChannelID, &discordgo.MessageEmbed{
+			Title:       "Deployment Report 📋",
+			Description: embed.Description,
+			Color:       0xf23f43,
+			Fields:      embed.Fields,
+			Timestamp:   time.Now().UTC().Format(time.RFC3339),
+			Thumbnail: &discordgo.MessageEmbedThumbnail{
+				URL: "https://i.ibb.co/67ZpGxTj/image.png",
+			},
+		})
+	}
 }
 
 func (b *Bot) MessageReactionAddHandler(s *discordgo.Session, ev *discordgo.MessageReactionAdd) {
@@ -1046,4 +1138,162 @@ func (b *Bot) MessageReactionRemoveHandler(s *discordgo.Session, ev *discordgo.M
 		Embeds:     &msg.Embeds,
 		Components: &msg.Components,
 	})
+}
+
+func (b *Bot) handleInfractionHistorySlash(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	if !b.hasAccess(i.Member, b.RoleHighCommand) {
+		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied 🚫", "You do not have the required role to view infraction history.", 0xf23f43)
+		return
+	}
+
+	options := i.ApplicationCommandData().Options
+	var targetUser *discordgo.User
+	for _, opt := range options {
+		if opt.Name == "user" {
+			targetUser = opt.UserValue(s)
+		}
+	}
+
+	if targetUser == nil {
+		b.sendEmbedEphemeral(s, i.Interaction, "Error ❌", "User option is required.", 0xf23f43)
+		return
+	}
+
+	list, err := b.DB.GetInfractions(context.Background(), targetUser.ID)
+	if err != nil {
+		b.sendEmbedEphemeral(s, i.Interaction, "Error ❌", "Failed to retrieve infraction history.", 0xf23f43)
+		return
+	}
+
+	if len(list) == 0 {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("<@%s>", targetUser.ID),
+				Embeds: []*discordgo.MessageEmbed{
+					{
+						Title:       "Infraction History 📋",
+						Description: "This user has no infractions recorded.",
+						Color:       0x23a559,
+						Thumbnail: &discordgo.MessageEmbedThumbnail{
+							URL: "https://i.ibb.co/67ZpGxTj/image.png",
+						},
+					},
+				},
+			},
+		})
+		return
+	}
+
+	var fields []*discordgo.MessageEmbedField
+	for idx, inf := range list {
+		appealDueText := "None"
+		if inf.AppealDue != nil && *inf.AppealDue != "" {
+			appealDueText = *inf.AppealDue
+		}
+		val := fmt.Sprintf("**Filed by:** <@%s>\n**Punishment:** %s\n**Reason:** %s\n**Appeal Due:** %s\n**Date:** <t:%d:F>",
+			inf.ModID, inf.Punishment, inf.Reason, appealDueText, inf.CreatedAt.Unix())
+
+		if inf.ImageURL != nil && *inf.ImageURL != "" {
+			val += fmt.Sprintf("\n[Proof Attachment](%s)", *inf.ImageURL)
+		}
+
+		fields = append(fields, &discordgo.MessageEmbedField{
+			Name:   fmt.Sprintf("Infraction #%d", len(list)-idx),
+			Value:  val,
+			Inline: false,
+		})
+	}
+
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: fmt.Sprintf("<@%s>", targetUser.ID),
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Title:       "Infraction History 📋",
+					Description: fmt.Sprintf("Total recorded infractions: **%d**", len(list)),
+					Color:       0xf23f43,
+					Fields:      fields,
+					Thumbnail: &discordgo.MessageEmbedThumbnail{
+						URL: "https://i.ibb.co/67ZpGxTj/image.png",
+					},
+				},
+			},
+		},
+	})
+}
+
+func parseDuration(s string) (time.Duration, bool) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if len(s) == 0 {
+		return 0, false
+	}
+	var num int
+	var unit string
+	for idx, char := range s {
+		if char >= '0' && char <= '9' {
+			num = num*10 + int(char-'0')
+		} else {
+			unit = s[idx:]
+			break
+		}
+	}
+	if num == 0 {
+		return 0, false
+	}
+	switch unit {
+	case "d", "day", "days":
+		return time.Duration(num) * 24 * time.Hour, true
+	case "h", "hour", "hours":
+		return time.Duration(num) * time.Hour, true
+	case "m", "min", "mins", "minute", "minutes":
+		return time.Duration(num) * time.Minute, true
+	}
+	return 0, false
+}
+
+func (b *Bot) startExpiryChecker() {
+	ticker := time.NewTicker(1 * time.Minute)
+	for range ticker.C {
+		b.checkExpiredLeaves()
+	}
+}
+
+func (b *Bot) checkExpiredLeaves() {
+	ctx := context.Background()
+	expired, err := b.DB.GetExpiredLeaves(ctx)
+	if err != nil {
+		return
+	}
+	if len(expired) == 0 {
+		return
+	}
+
+	var logChannelID string
+	channels, err := b.Session.GuildChannels(b.GuildID)
+	if err == nil {
+		for _, ch := range channels {
+			if ch.Name == "loa-roa-logs" {
+				logChannelID = ch.ID
+				break
+			}
+		}
+		if logChannelID == "" {
+			for _, ch := range channels {
+				if ch.Name == "announcements" || ch.Name == "group-logs" {
+					logChannelID = ch.ID
+					break
+				}
+			}
+		}
+	}
+
+	for _, leave := range expired {
+		if logChannelID != "" {
+			msg := fmt.Sprintf("⚠️ **Leave Expired:** <@%s>'s %s has expired. They are expected back on active duty.", leave.UserID, leave.Type)
+			_, _ = b.Session.ChannelMessageSend(logChannelID, msg)
+		}
+		_ = b.DB.MarkLeaveNotified(ctx, leave.ID)
+	}
 }
