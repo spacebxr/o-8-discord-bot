@@ -203,3 +203,12 @@ func (db *Database) GetUserRoles(ctx context.Context, userID string) ([]string, 
 	err := db.Pool.QueryRow(ctx, "SELECT role_ids FROM user_roles WHERE user_id = $1", userID).Scan(&roleIDs)
 	return roleIDs, err
 }
+
+func (db *Database) UpsertRole(ctx context.Context, roleID, name string) error {
+	_, err := db.Pool.Exec(ctx,
+		"INSERT INTO roles (id, name, updated_at) VALUES ($1, $2, now()) ON CONFLICT (id) DO UPDATE SET name = $2, updated_at = now()",
+		roleID, name,
+	)
+	return err
+}
+

@@ -119,6 +119,10 @@ func (b *Bot) Start() error {
 			},
 		},
 		{
+			Name:        "syncroles",
+			Description: "Sync all member roles and metadata to the database",
+		},
+		{
 			Name:        "loarequest",
 			Description: "Create a request for leave (LOA)",
 			Options: []*discordgo.ApplicationCommandOption{
@@ -260,12 +264,6 @@ func (b *Bot) Start() error {
 							Type:        discordgo.ApplicationCommandOptionUser,
 							Name:        "cohost",
 							Description: "Co-host of the deployment",
-							Required:    true,
-						},
-						{
-							Type:        discordgo.ApplicationCommandOptionString,
-							Name:        "participants",
-							Description: "Mention participants (@user @user ...)",
 							Required:    true,
 						},
 						{

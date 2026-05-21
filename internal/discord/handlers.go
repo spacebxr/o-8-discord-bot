@@ -88,6 +88,8 @@ func (b *Bot) InteractionCreateHandler(s *discordgo.Session, i *discordgo.Intera
 			b.handleAFKSlash(s, i)
 		case "announce":
 			b.handleAnnounceSlash(s, i)
+		case "syncroles":
+			b.handleSyncRolesSlash(s, i)
 		}
 	case discordgo.InteractionMessageComponent:
 		cid := i.MessageComponentData().CustomID
@@ -765,7 +767,7 @@ func (b *Bot) handleAnnounceMessage(s *discordgo.Session, i *discordgo.Interacti
 }
 
 func (b *Bot) handleAnnounceDeployment(s *discordgo.Session, i *discordgo.InteractionCreate, sub *discordgo.ApplicationCommandInteractionDataOption) {
-	var message, participants, location string
+	var message, location string
 	var hostUser, cohostUser *discordgo.User
 
 	for _, opt := range sub.Options {
@@ -776,12 +778,12 @@ func (b *Bot) handleAnnounceDeployment(s *discordgo.Session, i *discordgo.Intera
 			hostUser = opt.UserValue(s)
 		case "cohost":
 			cohostUser = opt.UserValue(s)
-		case "participants":
-			participants = opt.StringValue()
 		case "location":
 			location = opt.StringValue()
 		}
 	}
+
+	participants := "None"
 
 	hostMention := "Unknown"
 	if hostUser != nil {
@@ -803,9 +805,6 @@ func (b *Bot) handleAnnounceDeployment(s *discordgo.Session, i *discordgo.Intera
 	}
 	if cohostUser != nil {
 		pings = append(pings, "<@"+cohostUser.ID+">")
-	}
-	if participants != "" {
-		pings = append(pings, participants)
 	}
 	pingsStr := strings.Join(pings, " ")
 
@@ -1303,4 +1302,64 @@ func (b *Bot) GuildMemberUpdateHandler(s *discordgo.Session, ev *discordgo.Guild
 		return
 	}
 	_ = b.DB.UpsertUserRoles(context.Background(), ev.Member.User.ID, ev.Member.Roles)
+}
+
+func (b *Bot) handleSyncRolesSlash(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	if !b.hasAccess(i.Member, b.RoleHighCommand) {
+		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied", "You do not have the required role to run this command.", 0xf23f43)
+		return
+	}
+
+	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Flags: discordgo.MessageFlagsEphemeral,
+		},
+	})
+
+	ctx := context.Background()
+
+	roles, err := s.GuildRoles(i.GuildID)
+	if err == nil {
+		for _, r := range roles {
+			_ = b.DB.UpsertRole(ctx, r.ID, r.Name)
+		}
+	}
+
+	var allMembers []*discordgo.Member
+	after := ""
+	for {
+		m, err := s.GuildMembers(i.GuildID, after, 1000)
+		if err != nil {
+			break
+		}
+		if len(m) == 0 {
+			break
+		}
+		allMembers = append(allMembers, m...)
+		after = m[len(m)-1].User.ID
+		if len(m) < 1000 {
+			break
+		}
+	}
+
+	for _, member := range allMembers {
+		if member.User != nil {
+			_ = b.DB.UpsertUserRoles(ctx, member.User.ID, member.Roles)
+		}
+	}
+
+	embed := &discordgo.MessageEmbed{
+		Title:       "Sync Completed Successfully",
+		Description: fmt.Sprintf("Synced **%d** roles and **%d** member role lists to the database.", len(roles), len(allMembers)),
+		Color:       0x23a559,
+		Timestamp:   time.Now().UTC().Format(time.RFC3339),
+		Thumbnail: &discordgo.MessageEmbedThumbnail{
+			URL: "https://i.ibb.co/67ZpGxTj/image.png",
+		},
+	}
+
+	_, _ = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+		Embeds: &[]*discordgo.MessageEmbed{embed},
+	})
 }
