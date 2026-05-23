@@ -672,7 +672,34 @@ func (b *Bot) handleCNComponent(s *discordgo.Session, i *discordgo.InteractionCr
 
 	var nickErr error
 	if status == "approved" {
-		nickname := fmt.Sprintf("[LR] %q", codename)
+		prefix := "[LR]"
+		member, err := s.GuildMember(i.GuildID, discordID)
+		if err == nil {
+			guildRoles, err := s.GuildRoles(i.GuildID)
+			if err == nil {
+				var factionRepRoleID string
+				for _, r := range guildRoles {
+					if r.Name == "Faction Representative" {
+						factionRepRoleID = r.ID
+						break
+					}
+				}
+				if factionRepRoleID != "" {
+					for _, rID := range member.Roles {
+						if rID == factionRepRoleID {
+							prefix = "[FR]"
+							break
+						}
+					}
+				}
+			}
+		}
+
+		codenameClean := strings.Trim(codename, "\"")
+		if len(codenameClean) > 25 {
+			codenameClean = codenameClean[:25]
+		}
+		nickname := fmt.Sprintf("%s \"%s\"", prefix, codenameClean)
 		nickErr = s.GuildMemberNickname(i.GuildID, discordID, nickname)
 	}
 
