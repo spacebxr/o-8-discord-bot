@@ -110,6 +110,12 @@ func (b *Bot) InteractionCreateHandler(s *discordgo.Session, i *discordgo.Intera
 		if strings.HasPrefix(cid, "deploy_end_") {
 			b.handleDeployEnd(s, i)
 		}
+		if strings.HasPrefix(cid, "sw_stop_") {
+			b.handleStopwatchStopButton(s, i)
+		}
+		if strings.HasPrefix(cid, "sw_reset_") {
+			b.handleStopwatchResetButton(s, i)
+		}
 	}
 }
 
@@ -512,58 +518,134 @@ func (b *Bot) handleStopwatchSlash(s *discordgo.Session, i *discordgo.Interactio
 
 	ctx := context.Background()
 	userID := i.Member.User.ID
-	var title, content string
-	color := 0x5865F2
 
 	switch subcommand {
 	case "start":
-		title = "Stopwatch Started ⏱️"
 		err := b.DB.StartStopwatch(ctx, userID)
 		if err != nil {
-			content = "Failed to start stopwatch. It might already be running."
-			color = 0xf23f43
-		} else {
-			content = "Your activity stopwatch is now running."
-			color = 0x23a559
+			b.sendEmbedEphemeral(s, i.Interaction, "Stopwatch Already Running ⚠️", "Your stopwatch is already running. Stop it first before starting a new one.", 0xf23f43)
+			return
 		}
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Embeds: []*discordgo.MessageEmbed{
+					{
+						Title:       "Stopwatch Started ⏱️",
+						Description: fmt.Sprintf("<@%s>'s activity stopwatch is now running.\n\n**Started:** <t:%d:R>", userID, time.Now().Unix()),
+						Color:       0x23a559,
+						Timestamp:   time.Now().UTC().Format(time.RFC3339),
+						Thumbnail: &discordgo.MessageEmbedThumbnail{
+							URL: "https://i.ibb.co/67ZpGxTj/image.png",
+						},
+					},
+				},
+				Components: []discordgo.MessageComponent{
+					discordgo.ActionsRow{
+						Components: []discordgo.MessageComponent{
+							discordgo.Button{
+								Label:    "Stop",
+								Style:    discordgo.DangerButton,
+								CustomID: "sw_stop_" + userID,
+							},
+							discordgo.Button{
+								Label:    "Reset",
+								Style:    discordgo.SecondaryButton,
+								CustomID: "sw_reset_" + userID,
+							},
+						},
+					},
+				},
+			},
+		})
+
 	case "stop":
-		title = "Stopwatch Stopped ⏹️"
-		total, err := b.DB.StopStopwatch(ctx, userID)
+		total, startedAt, endedAt, err := b.DB.StopStopwatch(ctx, userID)
 		if err != nil {
-			content = "Failed to stop stopwatch. It might not be running."
-			color = 0xf23f43
-		} else {
-			content = fmt.Sprintf("Stopwatch stopped!\n**Session/Total Time:** %s", formatDuration(total))
-			color = 0x23a559
+			b.sendEmbedEphemeral(s, i.Interaction, "No Active Stopwatch ⚠️", "You do not have a running stopwatch to stop.", 0xf23f43)
+			return
 		}
-	case "status":
-		title = "Stopwatch Status 📊"
+		sessionDur := int64(endedAt.Sub(startedAt).Seconds())
+		_ = b.DB.LogStopwatchSession(ctx, userID, startedAt, endedAt, sessionDur)
+		b.sendEmbedResponse(s, i.Interaction, "Stopwatch Stopped ⏹️",
+			fmt.Sprintf("Session logged.\n**Session Duration:** %s\n**Total Accumulated:** %s", formatDuration(sessionDur), formatDuration(total)),
+			0x5865F2)
+
+	case "view":
 		startTime, total, err := b.DB.GetStopwatch(ctx, userID)
 		if err != nil {
-			content = "No recorded stopwatch data found."
-			color = 0xf23f43
-		} else {
-			current := total
-			status := "Stopped"
-			if startTime != nil {
-				current += int64(time.Since(*startTime).Seconds())
-				status = "Running"
-			}
-			content = fmt.Sprintf("Current Status: **%s**\nAccumulated Time: **%s**", status, formatDuration(current))
+			b.sendEmbedEphemeral(s, i.Interaction, "No Data Found ⚠️", "No recorded stopwatch data found for you.", 0xf23f43)
+			return
 		}
-	case "reset":
-		title = "Stopwatch Reset ♻️"
-		err := b.DB.ResetStopwatch(ctx, userID)
-		if err != nil {
-			content = "Failed to reset stopwatch data."
-			color = 0xf23f43
-		} else {
-			content = "Your activity stopwatch has been reset to zero."
-			color = 0x23a559
+		current := total
+		status := "Stopped"
+		if startTime != nil {
+			current += int64(time.Since(*startTime).Seconds())
+			status = "Running"
 		}
+		b.sendEmbedResponse(s, i.Interaction, "Stopwatch Status 📊",
+			fmt.Sprintf("**Status:** %s\n**Accumulated Time:** %s", status, formatDuration(current)),
+			0x5865F2)
 	}
+}
 
-	b.sendEmbedResponse(s, i.Interaction, title, content, color)
+func (b *Bot) handleStopwatchStopButton(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	ownerID := strings.TrimPrefix(i.MessageComponentData().CustomID, "sw_stop_")
+	if i.Member.User.ID != ownerID {
+		b.sendEmbedEphemeral(s, i.Interaction, "Not Your Stopwatch ⚠️", "You can only stop your own stopwatch.", 0xf23f43)
+		return
+	}
+	ctx := context.Background()
+	total, startedAt, endedAt, err := b.DB.StopStopwatch(ctx, ownerID)
+	if err != nil {
+		b.sendEmbedEphemeral(s, i.Interaction, "No Active Stopwatch ⚠️", "This stopwatch is not currently running.", 0xf23f43)
+		return
+	}
+	sessionDur := int64(endedAt.Sub(startedAt).Seconds())
+	_ = b.DB.LogStopwatchSession(ctx, ownerID, startedAt, endedAt, sessionDur)
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseUpdateMessage,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Title:       "Stopwatch Stopped ⏹️",
+					Description: fmt.Sprintf("<@%s>'s session has been logged.\n\n**Session Duration:** %s\n**Total Accumulated:** %s", ownerID, formatDuration(sessionDur), formatDuration(total)),
+					Color:       0x5865F2,
+					Timestamp:   time.Now().UTC().Format(time.RFC3339),
+					Thumbnail: &discordgo.MessageEmbedThumbnail{
+						URL: "https://i.ibb.co/67ZpGxTj/image.png",
+					},
+				},
+			},
+			Components: []discordgo.MessageComponent{},
+		},
+	})
+}
+
+func (b *Bot) handleStopwatchResetButton(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	ownerID := strings.TrimPrefix(i.MessageComponentData().CustomID, "sw_reset_")
+	if i.Member.User.ID != ownerID {
+		b.sendEmbedEphemeral(s, i.Interaction, "Not Your Stopwatch ⚠️", "You can only reset your own stopwatch.", 0xf23f43)
+		return
+	}
+	_ = b.DB.ResetStopwatch(context.Background(), ownerID)
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseUpdateMessage,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Title:       "Stopwatch Reset ♻️",
+					Description: fmt.Sprintf("<@%s>'s stopwatch has been fully reset.", ownerID),
+					Color:       0xfaa61a,
+					Timestamp:   time.Now().UTC().Format(time.RFC3339),
+					Thumbnail: &discordgo.MessageEmbedThumbnail{
+						URL: "https://i.ibb.co/67ZpGxTj/image.png",
+					},
+				},
+			},
+			Components: []discordgo.MessageComponent{},
+		},
+	})
 }
 
 func formatDuration(seconds int64) string {

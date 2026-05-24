@@ -41,13 +41,27 @@ func (db *Database) StartStopwatch(ctx context.Context, userID string) error {
 	return err
 }
 
-func (db *Database) StopStopwatch(ctx context.Context, userID string) (int64, error) {
+func (db *Database) StopStopwatch(ctx context.Context, userID string) (int64, time.Time, time.Time, error) {
 	var total int64
+	var startedAt, endedAt time.Time
 	err := db.Pool.QueryRow(ctx,
-		"UPDATE stopwatches SET total_seconds = total_seconds + EXTRACT(EPOCH FROM (now() - start_time)), start_time = NULL WHERE user_id = $1 AND start_time IS NOT NULL RETURNING total_seconds",
+		`WITH prev AS (
+			SELECT start_time FROM stopwatches WHERE user_id = $1 AND start_time IS NOT NULL
+		), upd AS (
+			UPDATE stopwatches SET total_seconds = total_seconds + EXTRACT(EPOCH FROM (now() - start_time))::bigint, start_time = NULL WHERE user_id = $1 AND start_time IS NOT NULL RETURNING total_seconds
+		)
+		SELECT upd.total_seconds, prev.start_time, now() FROM upd, prev`,
 		userID,
-	).Scan(&total)
-	return total, err
+	).Scan(&total, &startedAt, &endedAt)
+	return total, startedAt, endedAt, err
+}
+
+func (db *Database) LogStopwatchSession(ctx context.Context, userID string, startedAt, endedAt time.Time, durationSeconds int64) error {
+	_, err := db.Pool.Exec(ctx,
+		"INSERT INTO stopwatch_sessions (user_id, started_at, ended_at, duration_seconds) VALUES ($1, $2, $3, $4)",
+		userID, startedAt, endedAt, durationSeconds,
+	)
+	return err
 }
 
 func (db *Database) GetStopwatch(ctx context.Context, userID string) (*time.Time, int64, error) {
