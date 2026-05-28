@@ -130,12 +130,6 @@ func (b *Bot) Start() error {
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
-					Name:        "from_when",
-					Description: "From when (d for day, h for hours, m for minutes)",
-					Required:    true,
-				},
-				{
-					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "till_when",
 					Description: "Till when (d for day, h for hours, m for minutes)",
 					Required:    true,
@@ -152,12 +146,6 @@ func (b *Bot) Start() error {
 			Name:        "roarequest",
 			Description: "Create a request for reduced activity (ROA)",
 			Options: []*discordgo.ApplicationCommandOption{
-				{
-					Type:        discordgo.ApplicationCommandOptionString,
-					Name:        "from_when",
-					Description: "From when (d for day, h for hours, m for minutes)",
-					Required:    true,
-				},
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "till_when",

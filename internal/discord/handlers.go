@@ -286,14 +286,11 @@ func (b *Bot) handleInfractionCreateSlash(s *discordgo.Session, i *discordgo.Int
 
 func (b *Bot) handleLoaCreateSlash(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	options := i.ApplicationCommandData().Options
-	var fromWhen string
 	var tillWhen string
 	var reason string
 
 	for _, opt := range options {
 		switch opt.Name {
-		case "from_when":
-			fromWhen = opt.StringValue()
 		case "till_when":
 			tillWhen = opt.StringValue()
 		case "reason":
@@ -301,13 +298,18 @@ func (b *Bot) handleLoaCreateSlash(s *discordgo.Session, i *discordgo.Interactio
 		}
 	}
 
-	reqID, err := b.DB.InsertLoaRoaRequest(context.Background(), i.Member.User.ID, "LOA", fromWhen, tillWhen, reason)
+	if _, ok := parseDuration(tillWhen); !ok {
+		b.sendEmbedEphemeral(s, i.Interaction, "Invalid Time Format ❌", "The `till_when` format is incorrect. Please use `d` for days, `h` for hours, `m` for minutes, or `s` for seconds (e.g., `2d`, `5h`, `30m`).", 0xf23f43)
+		return
+	}
+
+	reqID, err := b.DB.InsertLoaRoaRequest(context.Background(), i.Member.User.ID, "LOA", "Now", tillWhen, reason)
 	if err != nil {
 		b.sendEmbedEphemeral(s, i.Interaction, "Database Error ❌", "Failed to save LOA request.", 0xf23f43)
 		return
 	}
 
-	content := fmt.Sprintf("<@%s> is requesting a Leave of Absence.\n\n**From:** %s\n**To:** %s\n**Reason:** %s", i.Member.User.ID, fromWhen, tillWhen, reason)
+	content := fmt.Sprintf("<@%s> is requesting a Leave of Absence.\n\n**From:** Now\n**To:** %s\n**Reason:** %s", i.Member.User.ID, tillWhen, reason)
 
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -400,14 +402,11 @@ func (b *Bot) handleLoaComponent(s *discordgo.Session, i *discordgo.InteractionC
 
 func (b *Bot) handleRoaRequestSlash(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	options := i.ApplicationCommandData().Options
-	var fromWhen string
 	var tillWhen string
 	var reason string
 
 	for _, opt := range options {
 		switch opt.Name {
-		case "from_when":
-			fromWhen = opt.StringValue()
 		case "till_when":
 			tillWhen = opt.StringValue()
 		case "reason":
@@ -415,13 +414,18 @@ func (b *Bot) handleRoaRequestSlash(s *discordgo.Session, i *discordgo.Interacti
 		}
 	}
 
-	reqID, err := b.DB.InsertLoaRoaRequest(context.Background(), i.Member.User.ID, "ROA", fromWhen, tillWhen, reason)
+	if _, ok := parseDuration(tillWhen); !ok {
+		b.sendEmbedEphemeral(s, i.Interaction, "Invalid Time Format ❌", "The `till_when` format is incorrect. Please use `d` for days, `h` for hours, `m` for minutes, or `s` for seconds (e.g., `2d`, `5h`, `30m`).", 0xf23f43)
+		return
+	}
+
+	reqID, err := b.DB.InsertLoaRoaRequest(context.Background(), i.Member.User.ID, "ROA", "Now", tillWhen, reason)
 	if err != nil {
 		b.sendEmbedEphemeral(s, i.Interaction, "Database Error ❌", "Failed to save ROA request.", 0xf23f43)
 		return
 	}
 
-	content := fmt.Sprintf("<@%s> is requesting Reduced on Activity.\n\n**From:** %s\n**To:** %s\n**Reason:** %s", i.Member.User.ID, fromWhen, tillWhen, reason)
+	content := fmt.Sprintf("<@%s> is requesting Reduced on Activity.\n\n**From:** Now\n**To:** %s\n**Reason:** %s", i.Member.User.ID, tillWhen, reason)
 
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -1361,6 +1365,8 @@ func parseDuration(s string) (time.Duration, bool) {
 		return time.Duration(num) * time.Hour, true
 	case "m", "min", "mins", "minute", "minutes":
 		return time.Duration(num) * time.Minute, true
+	case "s", "sec", "secs", "second", "seconds":
+		return time.Duration(num) * time.Second, true
 	}
 	return 0, false
 }
