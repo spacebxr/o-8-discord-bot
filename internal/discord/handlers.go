@@ -140,13 +140,21 @@ func (b *Bot) MessageCreateHandler(s *discordgo.Session, m *discordgo.MessageCre
 		if user.ID == m.Author.ID {
 			continue
 		}
+		
+		name := user.GlobalName
+		if name == "" {
+			name = user.Username
+		}
+
 		if reason, since, err := b.DB.GetAFK(context.Background(), user.ID); err == nil {
 			durationStr := "<t:" + fmt.Sprint(since.Unix()) + ":R>"
-			name := user.GlobalName
-			if name == "" {
-				name = user.Username
-			}
 			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("**%s** is currently AFK: **%s** - %s", name, reason, durationStr))
+			continue
+		}
+
+		if expiresAt, err := b.DB.GetActiveUserLOA(context.Background(), user.ID); err == nil && expiresAt != nil {
+			dateStr := "<t:" + fmt.Sprint(expiresAt.Unix()) + ":F>"
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("**%s** is currently on an approved LOA and will come back on **%s**.", name, dateStr))
 		}
 	}
 
@@ -370,9 +378,11 @@ func (b *Bot) handleLoaComponent(s *discordgo.Session, i *discordgo.InteractionC
 	}
 
 	var expiresAt *time.Time
+	var userID string
 	if status == "approved" {
-		_, _, tillWhen, err := b.DB.GetLoaRoaRequest(context.Background(), reqID)
+		uid, _, tillWhen, err := b.DB.GetLoaRoaRequest(context.Background(), reqID)
 		if err == nil {
+			userID = uid
 			if dur, ok := parseDuration(tillWhen); ok {
 				exp := time.Now().Add(dur)
 				expiresAt = &exp
@@ -384,6 +394,18 @@ func (b *Bot) handleLoaComponent(s *discordgo.Session, i *discordgo.InteractionC
 	if err != nil {
 		b.sendEmbedEphemeral(s, i.Interaction, "Database Error ❌", "Failed to update LOA status in database.", 0xf23f43)
 		return
+	}
+
+	if status == "approved" && userID != "" {
+		guildRoles, err := s.GuildRoles(i.GuildID)
+		if err == nil {
+			for _, r := range guildRoles {
+				if strings.ToUpper(r.Name) == "LOA" {
+					_ = s.GuildMemberRoleAdd(i.GuildID, userID, r.ID)
+					break
+				}
+			}
+		}
 	}
 
 	embed := i.Message.Embeds[0]
@@ -1407,10 +1429,26 @@ func (b *Bot) checkExpiredLeaves() {
 		}
 	}
 
+	var loaRoleID string
+	if channels != nil {
+		guildRoles, err := b.Session.GuildRoles(b.GuildID)
+		if err == nil {
+			for _, r := range guildRoles {
+				if strings.ToUpper(r.Name) == "LOA" {
+					loaRoleID = r.ID
+					break
+				}
+			}
+		}
+	}
+
 	for _, leave := range expired {
 		if logChannelID != "" {
 			msg := fmt.Sprintf("⚠️ **Leave Expired:** <@%s>'s %s has expired. They are expected back on active duty.", leave.UserID, leave.Type)
 			_, _ = b.Session.ChannelMessageSend(logChannelID, msg)
+		}
+		if loaRoleID != "" && leave.Type == "LOA" {
+			_ = b.Session.GuildMemberRoleRemove(b.GuildID, leave.UserID, loaRoleID)
 		}
 		_ = b.DB.MarkLeaveNotified(ctx, leave.ID)
 	}

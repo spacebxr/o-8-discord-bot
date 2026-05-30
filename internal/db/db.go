@@ -204,6 +204,12 @@ func (db *Database) MarkLeaveNotified(ctx context.Context, id string) error {
 	return err
 }
 
+func (db *Database) GetActiveUserLOA(ctx context.Context, userID string) (*time.Time, error) {
+	var expiresAt *time.Time
+	err := db.Pool.QueryRow(ctx, "SELECT expires_at FROM loa_roa WHERE user_id = $1 AND type = 'LOA' AND status = 'approved' AND expires_at > now() ORDER BY expires_at DESC LIMIT 1", userID).Scan(&expiresAt)
+	return expiresAt, err
+}
+
 func (db *Database) UpsertUserRoles(ctx context.Context, userID string, roleIDs []string) error {
 	_, err := db.Pool.Exec(ctx,
 		"INSERT INTO user_roles (user_id, role_ids, updated_at) VALUES ($1, $2, now()) ON CONFLICT (user_id) DO UPDATE SET role_ids = $2, updated_at = now()",
