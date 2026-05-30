@@ -206,7 +206,7 @@ func (db *Database) MarkLeaveNotified(ctx context.Context, id string) error {
 
 func (db *Database) GetActiveUserLOA(ctx context.Context, userID string) (*time.Time, error) {
 	var expiresAt *time.Time
-	err := db.Pool.QueryRow(ctx, "SELECT expires_at FROM loa_roa WHERE user_id = $1 AND type = 'LOA' AND status = 'approved' AND expires_at > now() ORDER BY expires_at DESC LIMIT 1", userID).Scan(&expiresAt)
+	err := db.Pool.QueryRow(ctx, "SELECT expires_at FROM loa_roa WHERE user_id = $1 AND type = 'LOA' AND status = 'approved' AND (expires_at > now() OR expires_at IS NULL) ORDER BY expires_at DESC NULLS LAST LIMIT 1", userID).Scan(&expiresAt)
 	return expiresAt, err
 }
 

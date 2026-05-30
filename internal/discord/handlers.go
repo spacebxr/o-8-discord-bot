@@ -152,9 +152,13 @@ func (b *Bot) MessageCreateHandler(s *discordgo.Session, m *discordgo.MessageCre
 			continue
 		}
 
-		if expiresAt, err := b.DB.GetActiveUserLOA(context.Background(), user.ID); err == nil && expiresAt != nil {
-			dateStr := "<t:" + fmt.Sprint(expiresAt.Unix()) + ":F>"
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("**%s** is currently on an approved LOA and will come back on **%s**.", name, dateStr))
+		if expiresAt, err := b.DB.GetActiveUserLOA(context.Background(), user.ID); err == nil {
+			if expiresAt != nil {
+				dateStr := "<t:" + fmt.Sprint(expiresAt.Unix()) + ":F>"
+				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("**%s** is currently on an approved LOA and will come back on **%s**.", name, dateStr))
+			} else {
+				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("**%s** is currently on an approved LOA with an unspecified return date.", name))
+			}
 		}
 	}
 
