@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/joho/godotenv"
+	"github.com/spacebxr/o-8-discord-bot/internal/api"
 	"github.com/spacebxr/o-8-discord-bot/internal/db"
 	"github.com/spacebxr/o-8-discord-bot/internal/discord"
 )
@@ -42,6 +43,17 @@ func main() {
 		log.Fatal("Failed to start bot:", err)
 	}
 	defer bot.Stop()
+
+	apiServer := &api.Server{
+		Database: database,
+		Session:  bot.Session, // Need to export Session in Bot struct or get it somehow, let's check internal/discord/bot.go
+	}
+	go func() {
+		fmt.Println("Starting API server on :8080")
+		if err := apiServer.Start("8080"); err != nil {
+			log.Printf("API Server failed: %v", err)
+		}
+	}()
 
 	fmt.Println("Bot is running. Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)

@@ -218,6 +218,46 @@ func (db *Database) UpsertUserRoles(ctx context.Context, userID string, roleIDs 
 	return err
 }
 
+func (db *Database) LogUserMessage(ctx context.Context, userID string) error {
+	_, err := db.Pool.Exec(ctx,
+		"INSERT INTO personnel_stats (user_id, total_messages, last_message_at) VALUES ($1, 1, now()) ON CONFLICT (user_id) DO UPDATE SET total_messages = personnel_stats.total_messages + 1, last_message_at = now()",
+		userID,
+	)
+	return err
+}
+
+func (db *Database) IncrementUserDeployments(ctx context.Context, userID string) error {
+	_, err := db.Pool.Exec(ctx,
+		"INSERT INTO personnel_stats (user_id, deployments_participated) VALUES ($1, 1) ON CONFLICT (user_id) DO UPDATE SET deployments_participated = personnel_stats.deployments_participated + 1",
+		userID,
+	)
+	return err
+}
+
+type PersonnelStat struct {
+	UserID                  string
+	TotalMessages           int64
+	DeploymentsParticipated int64
+	LastMessageAt           *time.Time
+}
+
+func (db *Database) GetPersonnelStats(ctx context.Context) ([]PersonnelStat, error) {
+	rows, err := db.Pool.Query(ctx, "SELECT user_id, total_messages, deployments_participated, last_message_at FROM personnel_stats ORDER BY total_messages DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var stats []PersonnelStat
+	for rows.Next() {
+		var s PersonnelStat
+		if err := rows.Scan(&s.UserID, &s.TotalMessages, &s.DeploymentsParticipated, &s.LastMessageAt); err != nil {
+			return nil, err
+		}
+		stats = append(stats, s)
+	}
+	return stats, nil
+}
+
 func (db *Database) GetUserRoles(ctx context.Context, userID string) ([]string, error) {
 	var roleIDs []string
 	err := db.Pool.QueryRow(ctx, "SELECT role_ids FROM user_roles WHERE user_id = $1", userID).Scan(&roleIDs)

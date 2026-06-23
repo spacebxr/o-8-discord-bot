@@ -124,6 +124,9 @@ func (b *Bot) MessageCreateHandler(s *discordgo.Session, m *discordgo.MessageCre
 		return
 	}
 
+	// Log message stat
+	_ = b.DB.LogUserMessage(context.Background(), m.Author.ID)
+
 	// Check if author was AFK
 	_, _, err := b.DB.GetAFK(context.Background(), m.Author.ID)
 	if err == nil {
@@ -1193,6 +1196,7 @@ func (b *Bot) MessageReactionAddHandler(s *discordgo.Session, ev *discordgo.Mess
 				}
 				lines[idx] = "**Participants:** " + parts
 				updated = true
+				_ = b.DB.IncrementUserDeployments(context.Background(), ev.UserID)
 			}
 		}
 	}
