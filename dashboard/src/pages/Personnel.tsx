@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, ShieldAlert, MessageSquare, Activity, CalendarClock } from 'lucide-react';
 
 interface Strike {
@@ -40,6 +40,10 @@ const Personnel = () => {
   const filteredData = personnel.filter(user => 
     user.username.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (loading) {
+    return <div style={{ color: 'var(--text-secondary)' }}>Loading personnel data...</div>;
+  }
 
   return (
     <div>

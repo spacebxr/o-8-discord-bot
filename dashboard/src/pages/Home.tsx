@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { MessageSquare, Folder, Flag, Hand } from 'lucide-react';
 
 const Home = () => {
