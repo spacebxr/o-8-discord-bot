@@ -10,6 +10,7 @@ interface Strike {
 interface PersonnelData {
   id: string;
   username: string;
+  avatarUrl: string;
   deployments: number;
   totalMessages: number;
   lastMessageAt: string;
@@ -79,8 +80,12 @@ const Personnel = () => {
           <div key={user.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 40, height: 40, borderRadius: '50%', backgroundColor: '#36393f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <span style={{ fontSize: 18, fontWeight: 'bold' }}>{user.username.charAt(0).toUpperCase()}</span>
+                <div style={{ width: 40, height: 40, borderRadius: '50%', backgroundColor: '#36393f', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                  {user.avatarUrl ? (
+                    <img src={user.avatarUrl} alt={user.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <span style={{ fontSize: 18, fontWeight: 'bold' }}>{user.username.charAt(0).toUpperCase()}</span>
+                  )}
                 </div>
                 <h3 style={{ fontSize: 18, fontWeight: 600 }}>{user.username}</h3>
               </div>

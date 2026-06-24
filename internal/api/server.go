@@ -25,6 +25,7 @@ type Strike struct {
 type PersonnelResponse struct {
 	ID            string   `json:"id"`
 	Username      string   `json:"username"`
+	AvatarURL     string   `json:"avatarUrl"`
 	Deployments   int64    `json:"deployments"`
 	TotalMessages int64    `json:"totalMessages"`
 	LastMessageAt string   `json:"lastMessageAt"`
@@ -81,11 +82,13 @@ func (s *Server) handleGetPersonnel(w http.ResponseWriter, r *http.Request) {
 	for _, stat := range stats {
 		user, err := s.Session.User(stat.UserID)
 		username := "Unknown"
+		avatarUrl := ""
 		if err == nil {
 			username = user.Username
 			if user.GlobalName != "" {
 				username = user.GlobalName
 			}
+			avatarUrl = user.AvatarURL("")
 		}
 
 		lastMsg := "Never"
@@ -114,6 +117,7 @@ func (s *Server) handleGetPersonnel(w http.ResponseWriter, r *http.Request) {
 		response = append(response, PersonnelResponse{
 			ID:            stat.UserID,
 			Username:      username,
+			AvatarURL:     avatarUrl,
 			Deployments:   stat.DeploymentsParticipated,
 			TotalMessages: stat.TotalMessages,
 			LastMessageAt: lastMsg,
