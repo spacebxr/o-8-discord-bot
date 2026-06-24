@@ -308,3 +308,145 @@ func (db *Database) DeleteRoleConnection(ctx context.Context, id string) error {
 	_, err := db.Pool.Exec(ctx, "DELETE FROM role_connections WHERE id = $1", id)
 	return err
 }
+
+type Deployment struct {
+	ID              string     `json:"id"`
+	Message         string     `json:"message"`
+	HostID          string     `json:"hostId"`
+	CoHostID        string     `json:"coHostId"`
+	Location        string     `json:"location"`
+	Status          string     `json:"status"`
+	DiscordMessageID string    `json:"discordMessageId"`
+	StartedAt       *time.Time `json:"startedAt"`
+	EndedAt         *time.Time `json:"endedAt"`
+	DurationSeconds int64      `json:"durationSeconds"`
+	AnnouncedBy     string     `json:"announcedBy"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	UpdatedAt       time.Time  `json:"updatedAt"`
+}
+
+func (db *Database) CreateDeployment(ctx context.Context, message, hostID, coHostID, location, discordMessageID, announcedBy string) (string, error) {
+	var id string
+	err := db.Pool.QueryRow(ctx,
+		`INSERT INTO deployments (message, host_id, co_host_id, location, discord_message_id, announced_by)
+		 VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+		message, hostID, coHostID, location, discordMessageID, announcedBy,
+	).Scan(&id)
+	return id, err
+}
+
+func (db *Database) UpdateDeploymentStatus(ctx context.Context, discordMessageID, status string) error {
+	_, err := db.Pool.Exec(ctx,
+		"UPDATE deployments SET status = $1, updated_at = NOW() WHERE discord_message_id = $2",
+		status, discordMessageID,
+	)
+	return err
+}
+
+func (db *Database) StartDeployment(ctx context.Context, discordMessageID string, startTime time.Time) error {
+	_, err := db.Pool.Exec(ctx,
+		"UPDATE deployments SET status = 'started', started_at = $1, updated_at = NOW() WHERE discord_message_id = $2",
+		startTime, discordMessageID,
+	)
+	return err
+}
+
+func (db *Database) EndDeployment(ctx context.Context, discordMessageID string, endTime time.Time, durationSeconds int64) error {
+	_, err := db.Pool.Exec(ctx,
+		"UPDATE deployments SET status = 'ended', ended_at = $1, duration_seconds = $2, updated_at = NOW() WHERE discord_message_id = $3",
+		endTime, durationSeconds, discordMessageID,
+	)
+	return err
+}
+
+func (db *Database) GetDeployments(ctx context.Context) ([]Deployment, error) {
+	rows, err := db.Pool.Query(ctx,
+		`SELECT id, message, host_id, co_host_id, location, status, discord_message_id,
+		        started_at, ended_at, duration_seconds, announced_by, created_at, updated_at
+		 FROM deployments ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []Deployment
+	for rows.Next() {
+		var d Deployment
+		if err := rows.Scan(&d.ID, &d.Message, &d.HostID, &d.CoHostID, &d.Location,
+			&d.Status, &d.DiscordMessageID, &d.StartedAt, &d.EndedAt,
+			&d.DurationSeconds, &d.AnnouncedBy, &d.CreatedAt, &d.UpdatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, d)
+	}
+	if list == nil {
+		list = []Deployment{}
+	}
+	return list, nil
+}
+
+func (db *Database) GetDeploymentByMessageID(ctx context.Context, discordMessageID string) (*Deployment, error) {
+	var d Deployment
+	err := db.Pool.QueryRow(ctx,
+		`SELECT id, message, host_id, co_host_id, location, status, discord_message_id,
+		        started_at, ended_at, duration_seconds, announced_by, created_at, updated_at
+		 FROM deployments WHERE discord_message_id = $1`,
+		discordMessageID,
+	).Scan(&d.ID, &d.Message, &d.HostID, &d.CoHostID, &d.Location,
+		&d.Status, &d.DiscordMessageID, &d.StartedAt, &d.EndedAt,
+		&d.DurationSeconds, &d.AnnouncedBy, &d.CreatedAt, &d.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
+
+func (db *Database) AddDeploymentParticipant(ctx context.Context, discordMessageID, userID string) error {
+	_, err := db.Pool.Exec(ctx,
+		`INSERT INTO deployment_participants (deployment_id, user_id)
+		 SELECT id, $2 FROM deployments WHERE discord_message_id = $1
+		 ON CONFLICT DO NOTHING`,
+		discordMessageID, userID,
+	)
+	return err
+}
+
+func (db *Database) RemoveDeploymentParticipant(ctx context.Context, discordMessageID, userID string) error {
+	_, err := db.Pool.Exec(ctx,
+		`DELETE FROM deployment_participants
+		 WHERE deployment_id = (SELECT id FROM deployments WHERE discord_message_id = $1)
+		 AND user_id = $2`,
+		discordMessageID, userID,
+	)
+	return err
+}
+
+func (db *Database) GetDeploymentParticipants(ctx context.Context, discordMessageID string) ([]string, error) {
+	rows, err := db.Pool.Query(ctx,
+		`SELECT user_id FROM deployment_participants
+		 WHERE deployment_id = (SELECT id FROM deployments WHERE discord_message_id = $1)`,
+		discordMessageID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []string
+	for rows.Next() {
+		var uid string
+		if err := rows.Scan(&uid); err != nil {
+			return nil, err
+		}
+		list = append(list, uid)
+	}
+	return list, nil
+}
+
+func (db *Database) GetUserDeploymentCount(ctx context.Context, userID string) (int, error) {
+	var count int
+	err := db.Pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM deployment_participants WHERE user_id = $1`,
+		userID,
+	).Scan(&count)
+	return count, err
+}

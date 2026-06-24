@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar';
 import Home from './pages/Home';
 import Personnel from './pages/Personnel';
 import RoleConnections from './pages/RoleConnections';
+import Announce from './pages/Announce';
 import { ChevronDown } from 'lucide-react';
 
 function App() {
@@ -33,6 +34,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/personnel" element={<Personnel />} />
             <Route path="/role-connections" element={<RoleConnections />} />
+            <Route path="/announce" element={<Announce />} />
             {/* Add other routes here as they are built */}
             <Route path="*" element={
               <div style={{textAlign: 'center', color: 'var(--text-secondary)', marginTop: '100px'}}>

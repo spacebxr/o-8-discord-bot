@@ -1008,6 +1008,16 @@ func (b *Bot) handleAnnounceDeployment(s *discordgo.Session, i *discordgo.Intera
 		},
 	})
 	s.MessageReactionAdd(msg.ChannelID, msg.ID, "✅")
+
+	hostID := ""
+	if hostUser != nil {
+		hostID = hostUser.ID
+	}
+	cohostID := ""
+	if cohostUser != nil {
+		cohostID = cohostUser.ID
+	}
+	_, _ = b.DB.CreateDeployment(context.Background(), message, hostID, cohostID, location, msg.ID, i.Member.User.ID)
 }
 
 func (b *Bot) handleDeployStart(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -1042,6 +1052,8 @@ func (b *Bot) handleDeployStart(s *discordgo.Session, i *discordgo.InteractionCr
 			},
 		},
 	})
+
+	_ = b.DB.StartDeployment(context.Background(), msgID, startTime)
 }
 
 func (b *Bot) handleDeployOngoing(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -1073,6 +1085,8 @@ func (b *Bot) handleDeployOngoing(s *discordgo.Session, i *discordgo.Interaction
 			},
 		},
 	})
+
+	_ = b.DB.UpdateDeploymentStatus(context.Background(), msgID, "ongoing")
 }
 
 func (b *Bot) handleDeployEnd(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -1156,6 +1170,10 @@ func (b *Bot) handleDeployEnd(s *discordgo.Session, i *discordgo.InteractionCrea
 			},
 		})
 	}
+
+	if st, ok := deploymentStartTimes[msgID]; ok {
+		_ = b.DB.EndDeployment(context.Background(), msgID, endTime, int64(endTime.Sub(st).Seconds()))
+	}
 }
 
 func (b *Bot) MessageReactionAddHandler(s *discordgo.Session, ev *discordgo.MessageReactionAdd) {
@@ -1223,6 +1241,8 @@ func (b *Bot) MessageReactionAddHandler(s *discordgo.Session, ev *discordgo.Mess
 		Embeds:     &msg.Embeds,
 		Components: &msg.Components,
 	})
+
+	_ = b.DB.AddDeploymentParticipant(context.Background(), msg.ID, ev.UserID)
 }
 
 func (b *Bot) MessageReactionRemoveHandler(s *discordgo.Session, ev *discordgo.MessageReactionRemove) {
@@ -1284,6 +1304,8 @@ func (b *Bot) MessageReactionRemoveHandler(s *discordgo.Session, ev *discordgo.M
 		Embeds:     &msg.Embeds,
 		Components: &msg.Components,
 	})
+
+	_ = b.DB.RemoveDeploymentParticipant(context.Background(), msg.ID, ev.UserID)
 }
 
 func (b *Bot) handleInfractionHistorySlash(s *discordgo.Session, i *discordgo.InteractionCreate) {

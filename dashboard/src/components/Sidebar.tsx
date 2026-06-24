@@ -2,7 +2,7 @@
 import { NavLink } from 'react-router-dom';
 import { 
   Home, Settings, Terminal, MessageSquare, Paintbrush,
-  Shield, ShieldAlert, Bell, UserPlus, Smile, Hand, Link
+  Shield, ShieldAlert, Bell, Smile, Hand, Link, Volume2
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -64,9 +64,9 @@ const Sidebar = () => {
           <Bell size={18} />
           Social Notifications
         </NavLink>
-        <NavLink to="/join-roles" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
-          <UserPlus size={18} />
-          Join Roles
+        <NavLink to="/announce" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+          <Volume2 size={18} />
+          Announce
         </NavLink>
         <NavLink to="/reaction-roles" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
           <Smile size={18} />
