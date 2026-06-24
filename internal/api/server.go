@@ -3,7 +3,9 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
+	"os"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/spacebxr/o-8-discord-bot/internal/db"
@@ -30,8 +32,32 @@ type PersonnelResponse struct {
 }
 
 func (s *Server) Start(port string) error {
-	http.HandleFunc("/api/personnel", s.handleGetPersonnel)
-	return http.ListenAndServe(":"+port, nil)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/personnel", s.handleGetPersonnel)
+
+	distPath := "dashboard/dist"
+	if _, err := os.Stat(distPath); err != nil {
+		if _, errOpt := os.Stat("/dashboard/dist"); errOpt == nil {
+			distPath = "/dashboard/dist"
+		}
+	}
+
+	if _, err := os.Stat(distPath); err == nil {
+		log.Printf("Serving static dashboard files from: %s", distPath)
+		fs := http.FileServer(http.Dir(distPath))
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			filePath := distPath + r.URL.Path
+			if _, err := os.Stat(filePath); os.IsNotExist(err) {
+				http.ServeFile(w, r, distPath+"/index.html")
+				return
+			}
+			fs.ServeHTTP(w, r)
+		})
+	} else {
+		log.Printf("Warning: dashboard/dist or /dashboard/dist not found. Dashboard serving is disabled.")
+	}
+
+	return http.ListenAndServe(":"+port, mux)
 }
 
 func (s *Server) handleGetPersonnel(w http.ResponseWriter, r *http.Request) {
@@ -67,7 +93,6 @@ func (s *Server) handleGetPersonnel(w http.ResponseWriter, r *http.Request) {
 			lastMsg = stat.LastMessageAt.Format("2006-01-02 15:04 MST")
 		}
 
-		// Fetch strikes (infractions)
 		infractions, _ := s.Database.GetInfractions(ctx, stat.UserID)
 		var strikes []Strike
 		for _, inf := range infractions {
