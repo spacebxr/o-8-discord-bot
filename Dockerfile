@@ -1,7 +1,7 @@
 FROM node:20-alpine AS dashboard-builder
 WORKDIR /app/dashboard
 COPY dashboard/package*.json ./
-RUN npm ci
+RUN npm install
 COPY dashboard/ ./
 RUN npm run build
 
