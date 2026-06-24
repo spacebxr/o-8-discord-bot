@@ -94,7 +94,7 @@ func (s *Server) handleGetPersonnel(w http.ResponseWriter, r *http.Request) {
 		}
 
 		infractions, _ := s.Database.GetInfractions(ctx, stat.UserID)
-		var strikes []Strike
+		strikes := []Strike{}
 		for _, inf := range infractions {
 			if inf.Punishment == "Strike" || inf.Punishment == "strike" {
 				strikes = append(strikes, Strike{
