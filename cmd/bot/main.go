@@ -44,13 +44,18 @@ func main() {
 	}
 	defer bot.Stop()
 
+	apiPort := os.Getenv("PORT")
+	if apiPort == "" {
+		apiPort = "8080"
+	}
+
 	apiServer := &api.Server{
 		Database: database,
-		Session:  bot.Session, // Need to export Session in Bot struct or get it somehow, let's check internal/discord/bot.go
+		Session:  bot.Session,
 	}
 	go func() {
-		fmt.Println("Starting API server on :8080")
-		if err := apiServer.Start("8080"); err != nil {
+		fmt.Println("Starting API server on :" + apiPort)
+		if err := apiServer.Start(apiPort); err != nil {
 			log.Printf("API Server failed: %v", err)
 		}
 	}()

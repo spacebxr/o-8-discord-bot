@@ -23,8 +23,9 @@ const Personnel = () => {
 
   useEffect(() => {
     const fetchData = async () => {
+      const apiBase = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
       try {
-        const res = await fetch('http://localhost:8080/api/personnel');
+        const res = await fetch(`${apiBase}/api/personnel`);
         const data = await res.json();
         setPersonnel(data);
       } catch (err) {

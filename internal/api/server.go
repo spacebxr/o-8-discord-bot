@@ -35,7 +35,7 @@ func (s *Server) Start(port string) error {
 }
 
 func (s *Server) handleGetPersonnel(w http.ResponseWriter, r *http.Request) {
-	// Simple CORS
+
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
@@ -78,7 +78,6 @@ func (s *Server) handleGetPersonnel(w http.ResponseWriter, r *http.Request) {
 					Date:   inf.CreatedAt.Format("2006-01-02"),
 				})
 			} else {
-				// If not strictly "strike", we can still map them if needed, but let's map all infractions as strikes for the dashboard
 				strikes = append(strikes, Strike{
 					ID:     inf.ID,
 					Reason: inf.Punishment + " - " + inf.Reason,
@@ -97,7 +96,7 @@ func (s *Server) handleGetPersonnel(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	// Just in case, return empty array instead of null if no stats
+
 	if response == nil {
 		response = []PersonnelResponse{}
 	}
