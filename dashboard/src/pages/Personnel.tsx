@@ -129,7 +129,7 @@ const Personnel = () => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {user.strikes.map(strike => (
                     <div key={strike.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
-                      <span>• {strike.reason}</span>
+                      <span dangerouslySetInnerHTML={{ __html: `• ${strike.reason}` }} />
                       <span style={{ color: 'var(--text-secondary)' }}>{strike.date}</span>
                     </div>
                   ))}

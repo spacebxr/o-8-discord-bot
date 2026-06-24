@@ -3,9 +3,11 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/spacebxr/o-8-discord-bot/internal/db"
@@ -14,6 +16,7 @@ import (
 type Server struct {
 	Database *db.Database
 	Session  *discordgo.Session
+	GuildID  string
 }
 
 type Strike struct {
@@ -78,6 +81,16 @@ func (s *Server) handleGetPersonnel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetch roles to resolve mentions
+	roles, err := s.Session.GuildRoles(s.GuildID)
+	roleMap := make(map[string]*discordgo.Role)
+	if err == nil {
+		for _, r := range roles {
+			roleMap[r.ID] = r
+		}
+	}
+	mentionRegex := regexp.MustCompile(`<@&(\d+)>`)
+
 	var response []PersonnelResponse
 	for _, stat := range stats {
 		user, err := s.Session.User(stat.UserID)
@@ -99,19 +112,29 @@ func (s *Server) handleGetPersonnel(w http.ResponseWriter, r *http.Request) {
 		infractions, _ := s.Database.GetInfractions(ctx, stat.UserID)
 		strikes := []Strike{}
 		for _, inf := range infractions {
-			if inf.Punishment == "Strike" || inf.Punishment == "strike" {
-				strikes = append(strikes, Strike{
-					ID:     inf.ID,
-					Reason: inf.Reason,
-					Date:   inf.CreatedAt.Format("2006-01-02"),
-				})
-			} else {
-				strikes = append(strikes, Strike{
-					ID:     inf.ID,
-					Reason: inf.Punishment + " - " + inf.Reason,
-					Date:   inf.CreatedAt.Format("2006-01-02"),
-				})
+			reason := inf.Reason
+			if inf.Punishment != "Strike" && inf.Punishment != "strike" {
+				reason = inf.Punishment + " - " + reason
 			}
+
+			// Replace role mentions with HTML
+			reason = mentionRegex.ReplaceAllStringFunc(reason, func(m string) string {
+				roleID := mentionRegex.FindStringSubmatch(m)[1]
+				if role, exists := roleMap[roleID]; exists {
+					color := "var(--text-primary)"
+					if role.Color != 0 {
+						color = fmt.Sprintf("#%06x", role.Color)
+					}
+					return fmt.Sprintf(`<span style="color: %s; background-color: color-mix(in srgb, %s 15%%, transparent); padding: 2px 6px; border-radius: 4px; font-weight: 500;">@%s</span>`, color, color, role.Name)
+				}
+				return m
+			})
+
+			strikes = append(strikes, Strike{
+				ID:     inf.ID,
+				Reason: reason,
+				Date:   inf.CreatedAt.Format("2006-01-02"),
+			})
 		}
 
 		response = append(response, PersonnelResponse{

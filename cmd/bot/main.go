@@ -52,6 +52,7 @@ func main() {
 	apiServer := &api.Server{
 		Database: database,
 		Session:  bot.Session,
+		GuildID:  guildID,
 	}
 	go func() {
 		fmt.Println("Starting API server on :" + apiPort)
