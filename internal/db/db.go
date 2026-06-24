@@ -272,3 +272,39 @@ func (db *Database) UpsertRole(ctx context.Context, roleID, name string) error {
 	return err
 }
 
+type RoleConnection struct {
+	ID      string `json:"id"`
+	RoleIDA string `json:"roleIdA"`
+	RoleIDB string `json:"roleIdB"`
+}
+
+func (db *Database) GetRoleConnections(ctx context.Context) ([]RoleConnection, error) {
+	rows, err := db.Pool.Query(ctx, "SELECT id, role_id_a, role_id_b FROM role_connections")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []RoleConnection
+	for rows.Next() {
+		var rc RoleConnection
+		if err := rows.Scan(&rc.ID, &rc.RoleIDA, &rc.RoleIDB); err != nil {
+			return nil, err
+		}
+		list = append(list, rc)
+	}
+	if list == nil {
+		list = []RoleConnection{}
+	}
+	return list, nil
+}
+
+func (db *Database) AddRoleConnection(ctx context.Context, roleIDA, roleIDB string) (string, error) {
+	var id string
+	err := db.Pool.QueryRow(ctx, "INSERT INTO role_connections (role_id_a, role_id_b) VALUES ($1, $2) ON CONFLICT (role_id_a, role_id_b) DO UPDATE SET created_at = now() RETURNING id", roleIDA, roleIDB).Scan(&id)
+	return id, err
+}
+
+func (db *Database) DeleteRoleConnection(ctx context.Context, id string) error {
+	_, err := db.Pool.Exec(ctx, "DELETE FROM role_connections WHERE id = $1", id)
+	return err
+}

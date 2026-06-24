@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Home from './pages/Home';
 import Personnel from './pages/Personnel';
+import RoleConnections from './pages/RoleConnections';
 import { ChevronDown } from 'lucide-react';
 
 function App() {
@@ -31,6 +32,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/personnel" element={<Personnel />} />
+            <Route path="/role-connections" element={<RoleConnections />} />
             {/* Add other routes here as they are built */}
             <Route path="*" element={
               <div style={{textAlign: 'center', color: 'var(--text-secondary)', marginTop: '100px'}}>

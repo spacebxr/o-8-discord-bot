@@ -1466,7 +1466,28 @@ func (b *Bot) GuildMemberUpdateHandler(s *discordgo.Session, ev *discordgo.Guild
 	if ev.Member == nil || ev.Member.User == nil {
 		return
 	}
-	_ = b.DB.UpsertUserRoles(context.Background(), ev.Member.User.ID, ev.Member.Roles)
+	ctx := context.Background()
+	_ = b.DB.UpsertUserRoles(ctx, ev.Member.User.ID, ev.Member.Roles)
+
+	connections, err := b.DB.GetRoleConnections(ctx)
+	if err != nil || len(connections) == 0 {
+		return
+	}
+
+	currentRoles := make(map[string]bool)
+	for _, r := range ev.Member.Roles {
+		currentRoles[r] = true
+	}
+
+	for _, conn := range connections {
+		aHas := currentRoles[conn.RoleIDA]
+		bHas := currentRoles[conn.RoleIDB]
+		if aHas && !bHas {
+			_ = s.GuildMemberRoleAdd(ev.GuildID, ev.Member.User.ID, conn.RoleIDB)
+		} else if bHas && !aHas {
+			_ = s.GuildMemberRoleAdd(ev.GuildID, ev.Member.User.ID, conn.RoleIDA)
+		}
+	}
 }
 
 func (b *Bot) handleSyncRolesSlash(s *discordgo.Session, i *discordgo.InteractionCreate) {
