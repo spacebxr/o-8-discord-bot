@@ -310,9 +310,24 @@ func (b *Bot) handleVoiceJoin(s *discordgo.Session, i *discordgo.InteractionCrea
 		return
 	}
 
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Flags: discordgo.MessageFlagsEphemeral,
+		},
+	})
+
 	vc, err := b.joinVoiceChannel(s, i.GuildID, channelID)
 	if err != nil {
-		b.sendEmbedEphemeral(s, i.Interaction, "Error", "Failed to join voice channel: "+err.Error(), 0xf23f43)
+		s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Embeds: &[]*discordgo.MessageEmbed{
+				{
+					Title:       "Error",
+					Description: "Failed to join voice channel: " + err.Error(),
+					Color:       0xf23f43,
+				},
+			},
+		})
 		return
 	}
 
@@ -324,7 +339,18 @@ func (b *Bot) handleVoiceJoin(s *discordgo.Session, i *discordgo.InteractionCrea
 		stopChan:        make(chan struct{}),
 	})
 
-	b.sendEmbedEphemeral(s, i.Interaction, "Joined Voice Channel", "I've joined your voice channel. Use `/vc panel` to play recordings.", 0x23a559)
+	s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+		Embeds: &[]*discordgo.MessageEmbed{
+			{
+				Title:       "Joined Voice Channel",
+				Description: "I've joined your voice channel. Use `/vc panel` to play recordings.",
+				Color:       0x23a559,
+				Thumbnail: &discordgo.MessageEmbedThumbnail{
+					URL: "https://i.ibb.co/67ZpGxTj/image.png",
+				},
+			},
+		},
+	})
 }
 
 func (b *Bot) handleVoiceLeave(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -347,11 +373,14 @@ func (b *Bot) handleVoiceSelect(s *discordgo.Session, i *discordgo.InteractionCr
 		return
 	}
 
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredMessageUpdate,
+	})
+
 	b.VoiceManager.StopSession(i.GuildID)
 
 	vc, err := b.joinVoiceChannel(s, i.GuildID, channelID)
 	if err != nil {
-		b.sendEmbedEphemeral(s, i.Interaction, "Error", "Failed to join voice channel.", 0xf23f43)
 		return
 	}
 
@@ -365,10 +394,6 @@ func (b *Bot) handleVoiceSelect(s *discordgo.Session, i *discordgo.InteractionCr
 		stopChan:        stopChan,
 	}
 	b.VoiceManager.SetSession(i.GuildID, session)
-
-	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseDeferredMessageUpdate,
-	})
 
 	go func() {
 		fileURL := recording.FileURL

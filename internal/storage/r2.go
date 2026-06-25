@@ -19,14 +19,14 @@ type Client struct {
 }
 
 func NewClient() (*Client, error) {
-	endpoint := os.Getenv("BUCKET_ENDPOINT")
-	accessKey := os.Getenv("BUCKET_ACCESS_KEY")
-	secretKey := os.Getenv("BUCKET_SECRET_KEY")
-	bucketName := os.Getenv("BUCKET_NAME")
-	region := os.Getenv("BUCKET_REGION")
+	endpoint := os.Getenv("AWS_ENDPOINT_URL")
+	accessKey := os.Getenv("AWS_ACCESS_KEY_ID")
+	secretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+	bucketName := os.Getenv("AWS_S3_BUCKET_NAME")
+	region := os.Getenv("AWS_DEFAULT_REGION")
 
 	if endpoint == "" || accessKey == "" || secretKey == "" || bucketName == "" {
-		return nil, fmt.Errorf("BUCKET_ENDPOINT, BUCKET_ACCESS_KEY, BUCKET_SECRET_KEY, and BUCKET_NAME must be set")
+		return nil, fmt.Errorf("AWS_ENDPOINT_URL, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_S3_BUCKET_NAME must be set")
 	}
 	if region == "" {
 		region = "us-east-1"
