@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"runtime/debug"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -74,7 +75,19 @@ func (s *Server) Start(port string) error {
 		log.Printf("Warning: dashboard/dist or /dashboard/dist not found. Dashboard serving is disabled.")
 	}
 
-	return http.ListenAndServe(":"+port, mux)
+	return http.ListenAndServe(":"+port, recoveryMiddleware(mux))
+}
+
+func recoveryMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("PANIC: %v\n%s", rec, debug.Stack())
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) handleGetPersonnel(w http.ResponseWriter, r *http.Request) {
