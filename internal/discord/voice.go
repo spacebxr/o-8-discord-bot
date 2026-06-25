@@ -1,7 +1,6 @@
 package discord
 
 import (
-	"bufio"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -68,23 +67,71 @@ func (vm *VoiceManager) SetSession(guildID string, session *VoiceSession) {
 	vm.sessions[guildID] = session
 }
 
-// readOggPage reads one Ogg page from r and returns the contained packet data,
-// the granule position, and whether this page completes a logical packet.
-func readOggPage(r io.Reader) (data []byte, granulePos uint64, packetEnd bool, err error) {
+// oggPacketReader reads Ogg Opus pages and returns individual Opus packets,
+// handling multi-packet pages and cross-page continuation.
+type oggPacketReader struct {
+	r       io.Reader
+	buf     []byte  // partial packet accumulated across segments/pages
+	isAudio bool    // true once granulePos > 0 has been seen
+
+	// Remaining segments from the current page (lazy-read).
+	segSizes []int
+	segData  []byte
+	segOff   int
+	segGP    uint64
+}
+
+// next returns the next complete Opus packet. Header packets (OpusHead,
+// OpusTags) are consumed automatically.
+func (o *oggPacketReader) next() ([]byte, error) {
+	for {
+		// If we have no remaining segments, read the next Ogg page.
+		if len(o.segSizes) == 0 {
+			if err := o.readPage(); err != nil {
+				return nil, err
+			}
+		}
+
+		// Process one segment at a time.
+		segSize := o.segSizes[0]
+		o.segSizes = o.segSizes[1:]
+
+		seg := o.segData[o.segOff : o.segOff+segSize]
+		o.segOff += segSize
+
+		o.buf = append(o.buf, seg...)
+
+		if segSize < 255 {
+			// End of a complete packet.
+			pkt := o.buf
+			o.buf = nil
+
+			if o.segGP > 0 {
+				o.isAudio = true
+			}
+			if o.isAudio {
+				return pkt, nil
+			}
+			// Header packet — drop silently.
+		}
+	}
+}
+
+func (o *oggPacketReader) readPage() error {
 	var header [27]byte
-	if _, err = io.ReadFull(r, header[:]); err != nil {
-		return
+	if _, err := io.ReadFull(o.r, header[:]); err != nil {
+		return err
 	}
 	if string(header[:4]) != "OggS" {
-		err = fmt.Errorf("invalid Ogg page: bad magic")
-		return
+		return fmt.Errorf("invalid Ogg magic")
 	}
+
+	o.segGP = binary.LittleEndian.Uint64(header[6:14])
 
 	segCount := header[26]
 	segTable := make([]byte, segCount)
-	if _, err = io.ReadFull(r, segTable); err != nil {
-		err = fmt.Errorf("reading segment table: %w", err)
-		return
+	if _, err := io.ReadFull(o.r, segTable); err != nil {
+		return fmt.Errorf("segment table: %w", err)
 	}
 
 	totalSize := 0
@@ -92,15 +139,18 @@ func readOggPage(r io.Reader) (data []byte, granulePos uint64, packetEnd bool, e
 		totalSize += int(s)
 	}
 
-	data = make([]byte, totalSize)
-	if _, err = io.ReadFull(r, data); err != nil {
-		err = fmt.Errorf("reading page data: %w", err)
-		return
+	o.segData = make([]byte, totalSize)
+	if _, err := io.ReadFull(o.r, o.segData); err != nil {
+		return fmt.Errorf("page data: %w", err)
 	}
 
-	granulePos = binary.LittleEndian.Uint64(header[6:14])
-	packetEnd = segTable[segCount-1] < 255
-	return
+	o.segOff = 0
+	o.segSizes = make([]int, segCount)
+	for i, s := range segTable {
+		o.segSizes[i] = int(s)
+	}
+
+	return nil
 }
 
 func playAudioFile(vc *discordgo.VoiceConnection, fileURL string, stopChan chan struct{}) error {
@@ -162,8 +212,7 @@ func playAudioFile(vc *discordgo.VoiceConnection, fileURL string, stopChan chan 
 
 	go io.Copy(io.Discard, stderr)
 
-	reader := bufio.NewReaderSize(stdout, 4096)
-	var accumulated []byte
+	opr := &oggPacketReader{r: stdout}
 
 	for {
 		select {
@@ -172,24 +221,17 @@ func playAudioFile(vc *discordgo.VoiceConnection, fileURL string, stopChan chan 
 		default:
 		}
 
-		data, granulePos, packetEnd, err := readOggPage(reader)
+		pkt, err := opr.next()
 		if err != nil {
 			break
 		}
 
-		accumulated = append(accumulated, data...)
-
-		if packetEnd {
-			if granulePos > 0 {
-				select {
-				case vc.OpusSend <- accumulated:
-				case <-stopChan:
-					return nil
-				case <-time.After(time.Second):
-					return fmt.Errorf("timed out sending opus frame")
-				}
-			}
-			accumulated = nil
+		select {
+		case vc.OpusSend <- pkt:
+		case <-stopChan:
+			return nil
+		case <-time.After(time.Second):
+			return fmt.Errorf("timed out sending opus frame")
 		}
 	}
 
