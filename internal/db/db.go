@@ -450,3 +450,60 @@ func (db *Database) GetUserDeploymentCount(ctx context.Context, userID string) (
 	).Scan(&count)
 	return count, err
 }
+
+type AudioRecording struct {
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	FileURL         string    `json:"fileUrl"`
+	DurationSeconds float64   `json:"durationSeconds"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UploadedBy      string    `json:"uploadedBy"`
+}
+
+func (db *Database) AddAudioRecording(ctx context.Context, name, fileURL string, durationSeconds float64, uploadedBy string) (string, error) {
+	var id string
+	err := db.Pool.QueryRow(ctx,
+		`INSERT INTO audio_recordings (name, file_url, duration_seconds, uploaded_by) VALUES ($1, $2, $3, $4) RETURNING id`,
+		name, fileURL, durationSeconds, uploadedBy,
+	).Scan(&id)
+	return id, err
+}
+
+func (db *Database) GetAudioRecordings(ctx context.Context) ([]AudioRecording, error) {
+	rows, err := db.Pool.Query(ctx,
+		`SELECT id, name, file_url, duration_seconds, created_at, uploaded_by FROM audio_recordings ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []AudioRecording
+	for rows.Next() {
+		var r AudioRecording
+		if err := rows.Scan(&r.ID, &r.Name, &r.FileURL, &r.DurationSeconds, &r.CreatedAt, &r.UploadedBy); err != nil {
+			return nil, err
+		}
+		list = append(list, r)
+	}
+	if list == nil {
+		list = []AudioRecording{}
+	}
+	return list, nil
+}
+
+func (db *Database) DeleteAudioRecording(ctx context.Context, id string) error {
+	_, err := db.Pool.Exec(ctx, `DELETE FROM audio_recordings WHERE id = $1`, id)
+	return err
+}
+
+func (db *Database) GetAudioRecordingByID(ctx context.Context, id string) (*AudioRecording, error) {
+	var r AudioRecording
+	err := db.Pool.QueryRow(ctx,
+		`SELECT id, name, file_url, duration_seconds, created_at, uploaded_by FROM audio_recordings WHERE id = $1`,
+		id,
+	).Scan(&r.ID, &r.Name, &r.FileURL, &r.DurationSeconds, &r.CreatedAt, &r.UploadedBy)
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}

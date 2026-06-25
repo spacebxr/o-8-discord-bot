@@ -12,12 +12,14 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/spacebxr/o-8-discord-bot/internal/db"
+	"github.com/spacebxr/o-8-discord-bot/internal/storage"
 )
 
 type Server struct {
 	Database *db.Database
 	Session  *discordgo.Session
 	GuildID  string
+	Storage *storage.Client
 }
 
 type Strike struct {
@@ -46,6 +48,9 @@ func (s *Server) Start(port string) error {
 	mux.HandleFunc("/api/deployments/start", s.handleDeployStart)
 	mux.HandleFunc("/api/deployments/ongoing", s.handleDeployOngoing)
 	mux.HandleFunc("/api/deployments/end", s.handleDeployEnd)
+	mux.HandleFunc("/api/recordings", s.handleRecordings)
+	mux.HandleFunc("/api/recordings/upload", s.handleRecordingUpload)
+	mux.HandleFunc("/api/recordings/delete", s.handleRecordingDelete)
 
 	distPath := "dashboard/dist"
 	if _, err := os.Stat(distPath); err != nil {
@@ -733,4 +738,139 @@ func (s *Server) handleDeployEnd(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ended"})
 }
 
+func (s *Server) handleRecordings(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != "GET" {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	recordings, err := s.Database.GetAudioRecordings(context.Background())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	type recordingResponse struct {
+		ID              string  `json:"id"`
+		Name            string  `json:"name"`
+		FileURL         string  `json:"fileUrl"`
+		DurationSeconds float64 `json:"durationSeconds"`
+		CreatedAt       string  `json:"createdAt"`
+	}
+
+	resp := make([]recordingResponse, 0, len(recordings))
+	for _, rec := range recordings {
+		fileURL := rec.FileURL
+		if s.Storage != nil {
+			if u, err := s.Storage.GetURL(context.Background(), rec.FileURL); err == nil {
+				fileURL = u
+			}
+		}
+		resp = append(resp, recordingResponse{
+			ID:              rec.ID,
+			Name:            rec.Name,
+			FileURL:         fileURL,
+			DurationSeconds: rec.DurationSeconds,
+			CreatedAt:       rec.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) handleRecordingUpload(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != "POST" {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.Storage == nil {
+		http.Error(w, "Storage not configured", http.StatusInternalServerError)
+		return
+	}
+
+	err := r.ParseMultipartForm(50 << 20)
+	if err != nil {
+		http.Error(w, "failed to parse form", http.StatusBadRequest)
+		return
+	}
+
+	name := r.FormValue("name")
+	if name == "" {
+		http.Error(w, "name is required", http.StatusBadRequest)
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "file is required", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	objectName := fmt.Sprintf("recordings/%s", header.Filename)
+	objectKey, err := s.Storage.Upload(context.Background(), objectName, header.Header.Get("Content-Type"), file, header.Size)
+	if err != nil {
+		http.Error(w, "failed to upload file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	_, err = s.Database.AddAudioRecording(context.Background(), name, objectKey, 0, "dashboard")
+	if err != nil {
+		http.Error(w, "failed to save recording: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleRecordingDelete(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != "POST" {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var body struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ID == "" {
+		http.Error(w, "id is required", http.StatusBadRequest)
+		return
+	}
+
+	err := s.Database.DeleteAudioRecording(context.Background(), body.ID)
+	if err != nil {
+		http.Error(w, "failed to delete recording: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+}
 

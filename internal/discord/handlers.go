@@ -90,6 +90,8 @@ func (b *Bot) InteractionCreateHandler(s *discordgo.Session, i *discordgo.Intera
 			b.handleAnnounceSlash(s, i)
 		case "syncroles":
 			b.handleSyncRolesSlash(s, i)
+		case "vc":
+			b.handleVoiceSlash(s, i)
 		}
 	case discordgo.InteractionMessageComponent:
 		cid := i.MessageComponentData().CustomID
@@ -115,6 +117,18 @@ func (b *Bot) InteractionCreateHandler(s *discordgo.Session, i *discordgo.Intera
 		}
 		if strings.HasPrefix(cid, "sw_reset_") {
 			b.handleStopwatchResetButton(s, i)
+		}
+		if strings.HasPrefix(cid, "vc_play_") {
+			b.handleVoicePlayButton(s, i)
+		}
+		if strings.HasPrefix(cid, "vc_stop_") {
+			b.handleVoiceStopButton(s, i)
+		}
+		if cid == "vc_refresh" {
+			b.handleVoiceRefreshButton(s, i)
+		}
+		if cid == "vc_select" {
+			b.handleVoiceSelect(s, i)
 		}
 	}
 }

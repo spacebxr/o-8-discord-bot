@@ -2,7 +2,7 @@
 import { NavLink } from 'react-router-dom';
 import { 
   Home, Settings, Terminal, MessageSquare, Paintbrush,
-  Shield, ShieldAlert, Bell, Smile, Hand, Link, Volume2
+  Shield, ShieldAlert, Bell, Smile, Hand, Link, Volume2, Music
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -67,6 +67,10 @@ const Sidebar = () => {
         <NavLink to="/announce" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
           <Volume2 size={18} />
           Announce
+        </NavLink>
+        <NavLink to="/recordings" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
+          <Music size={18} />
+          Recordings
         </NavLink>
         <NavLink to="/reaction-roles" className={({isActive}) => `nav-item ${isActive ? 'active' : ''}`}>
           <Smile size={18} />

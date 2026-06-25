@@ -12,6 +12,7 @@ import (
 	"github.com/spacebxr/o-8-discord-bot/internal/api"
 	"github.com/spacebxr/o-8-discord-bot/internal/db"
 	"github.com/spacebxr/o-8-discord-bot/internal/discord"
+	"github.com/spacebxr/o-8-discord-bot/internal/storage"
 )
 
 func main() {
@@ -33,7 +34,12 @@ func main() {
 	}
 	defer database.Pool.Close()
 
-	bot, err := discord.NewBot(token, database, guildID, roleHighCommand, roleDevTeam)
+	storageClient, err := storage.NewClient()
+	if err != nil {
+		log.Printf("Warning: S3 storage not configured: %v", err)
+	}
+
+	bot, err := discord.NewBot(token, database, storageClient, guildID, roleHighCommand, roleDevTeam)
 	if err != nil {
 		log.Fatal("Failed to create bot:", err)
 	}
@@ -53,6 +59,7 @@ func main() {
 		Database: database,
 		Session:  bot.Session,
 		GuildID:  guildID,
+		Storage:  storageClient,
 	}
 	go func() {
 		fmt.Println("Starting API server on :" + apiPort)

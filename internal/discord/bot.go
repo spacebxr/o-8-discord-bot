@@ -6,6 +6,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/spacebxr/o-8-discord-bot/internal/db"
+	"github.com/spacebxr/o-8-discord-bot/internal/storage"
 )
 
 type Bot struct {
@@ -14,6 +15,8 @@ type Bot struct {
 	GuildID         string
 	RoleHighCommand []string
 	RoleDevTeam     []string
+	Storage        *storage.Client
+	VoiceManager    *VoiceManager
 }
 
 func splitRoles(s string) []string {
@@ -27,7 +30,7 @@ func splitRoles(s string) []string {
 	return result
 }
 
-func NewBot(token string, database *db.Database, guildID, roleHighCommand, roleDevTeam string) (*Bot, error) {
+func NewBot(token string, database *db.Database, storageClient *storage.Client, guildID, roleHighCommand, roleDevTeam string) (*Bot, error) {
 	sess, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return nil, err
@@ -41,6 +44,8 @@ func NewBot(token string, database *db.Database, guildID, roleHighCommand, roleD
 		GuildID:         guildID,
 		RoleHighCommand: splitRoles(roleHighCommand),
 		RoleDevTeam:     splitRoles(roleDevTeam),
+		Storage:        storageClient,
+		VoiceManager:    NewVoiceManager(),
 	}
 
 	b.Session.AddHandler(b.ReadyHandler)
@@ -213,6 +218,27 @@ func (b *Bot) Start() error {
 					Name:        "reason",
 					Description: "Reason for being AFK",
 					Required:    false,
+				},
+			},
+		},
+		{
+			Name:        "vc",
+			Description: "Voice channel controls",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Name:        "panel",
+					Description: "Show the voice control panel",
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+				},
+				{
+					Name:        "join",
+					Description: "Join your voice channel",
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+				},
+				{
+					Name:        "leave",
+					Description: "Leave the voice channel",
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
 				},
 			},
 		},

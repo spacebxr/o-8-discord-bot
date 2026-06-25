@@ -6,15 +6,15 @@ COPY dashboard/ ./
 RUN npm run build
 
 FROM golang:1.26-alpine AS go-builder
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates opus-dev gcc musl-dev
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o bot cmd/bot/main.go
+RUN CGO_ENABLED=1 go build -tags nolibopusfile -ldflags="-s -w" -o bot cmd/bot/main.go
 
-FROM scratch
-COPY --from=go-builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+FROM alpine:latest
+RUN apk add --no-cache ca-certificates ffmpeg opus
 COPY --from=go-builder /app/bot /bot
 COPY --from=dashboard-builder /app/dashboard/dist /dashboard/dist
 ENTRYPOINT ["/bot"]
