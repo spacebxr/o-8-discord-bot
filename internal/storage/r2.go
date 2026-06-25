@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
+	"net/url"
 	"os"
 	"time"
 
@@ -32,14 +34,27 @@ func NewClient() (*Client, error) {
 		region = "us-east-1"
 	}
 
-	client, err := minio.New(endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
-		Secure: true,
-		Region: region,
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse endpoint URL: %w", err)
+	}
+
+	hostEndpoint := u.Host
+	if u.Port() != "" {
+		hostEndpoint = u.Host // includes port if present
+	}
+
+	client, err := minio.New(hostEndpoint, &minio.Options{
+		Creds:        credentials.NewStaticV4(accessKey, secretKey, ""),
+		Secure:       u.Scheme == "https",
+		Region:       region,
+		BucketLookup: minio.BucketLookupPath,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create S3 client: %w", err)
 	}
+
+	log.Printf("S3 storage configured: endpoint=%s, bucket=%s, region=%s", hostEndpoint, bucketName, region)
 
 	return &Client{
 		client:     client,
