@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	"gopkg.in/hraban/opus.v2"
 )
 
 type PlaybackState int
@@ -69,28 +68,58 @@ func (vm *VoiceManager) SetSession(guildID string, session *VoiceSession) {
 	vm.sessions[guildID] = session
 }
 
+// readOggPage reads one Ogg page from r and returns the contained packet data,
+// the granule position, and whether this page completes a logical packet.
+func readOggPage(r io.Reader) (data []byte, granulePos uint64, packetEnd bool, err error) {
+	var header [27]byte
+	if _, err = io.ReadFull(r, header[:]); err != nil {
+		return
+	}
+	if string(header[:4]) != "OggS" {
+		err = fmt.Errorf("invalid Ogg page: bad magic")
+		return
+	}
+
+	segCount := header[26]
+	segTable := make([]byte, segCount)
+	if _, err = io.ReadFull(r, segTable); err != nil {
+		err = fmt.Errorf("reading segment table: %w", err)
+		return
+	}
+
+	totalSize := 0
+	for _, s := range segTable {
+		totalSize += int(s)
+	}
+
+	data = make([]byte, totalSize)
+	if _, err = io.ReadFull(r, data); err != nil {
+		err = fmt.Errorf("reading page data: %w", err)
+		return
+	}
+
+	granulePos = binary.LittleEndian.Uint64(header[6:14])
+	packetEnd = segTable[segCount-1] < 255
+	return
+}
+
 func playAudioFile(vc *discordgo.VoiceConnection, fileURL string, stopChan chan struct{}) error {
 	vc.Speaking(true)
 	defer vc.Speaking(false)
 
-	// For R2 URLs or direct URLs, download to a temp file first
 	var inputPath string
 	if fileURL != "" {
-		// Check if it's a local file or needs downloading
 		if _, err := os.Stat(fileURL); err == nil {
 			inputPath = fileURL
 		} else {
-			// Download to temp file
-			tmpFile, err := os.CreateTemp("", "audio-*.mp3")
+			tmpFile, err := os.CreateTemp("", "audio-*")
 			if err != nil {
 				return fmt.Errorf("failed to create temp file: %w", err)
 			}
 			defer os.Remove(tmpFile.Name())
 
-			// Use curl or wget to download (we have wget in alpine)
 			cmd := exec.Command("wget", "-q", "-O", tmpFile.Name(), fileURL)
 			if err := cmd.Run(); err != nil {
-				// Try curl
 				cmd = exec.Command("curl", "-s", "-o", tmpFile.Name(), fileURL)
 				if err := cmd.Run(); err != nil {
 					return fmt.Errorf("failed to download audio file: %w", err)
@@ -102,12 +131,15 @@ func playAudioFile(vc *discordgo.VoiceConnection, fileURL string, stopChan chan 
 		return fmt.Errorf("no file URL provided")
 	}
 
-	// Spawn FFmpeg: decode to PCM s16le 48000Hz mono
+	// FFmpeg: encode directly to Ogg Opus at 128kbps, 48kHz, mono
 	ffmpegCmd := exec.Command("ffmpeg",
 		"-i", inputPath,
-		"-f", "s16le",
-		"-ac", "1",
+		"-c:a", "libopus",
+		"-b:a", "128k",
 		"-ar", "48000",
+		"-ac", "1",
+		"-application", "audio",
+		"-f", "opus",
 		"pipe:1",
 	)
 
@@ -128,25 +160,10 @@ func playAudioFile(vc *discordgo.VoiceConnection, fileURL string, stopChan chan 
 		ffmpegCmd.Wait()
 	}()
 
-	// Drain stderr to avoid blocking
 	go io.Copy(io.Discard, stderr)
 
-	// Create Opus encoder: 48000Hz, mono, music quality
-	enc, err := opus.NewEncoder(48000, 1, opus.AppAudio)
-	if err != nil {
-		return fmt.Errorf("failed to create opus encoder: %w", err)
-	}
-	enc.SetBitrate(128000)
-	enc.SetComplexity(10)
-
-	// Read PCM and encode to Opus in 20ms frames (960 samples @ 48kHz)
-	const frameSize = 960      // samples per frame (20ms)
-	const pcmBufSize = frameSize * 2 // 2 bytes per sample (s16le)
-
-	pcmBuf := make([]byte, pcmBufSize)
-	opusBuf := make([]byte, 1500) // max opus frame size
-
-	reader := bufio.NewReaderSize(stdout, pcmBufSize*64)
+	reader := bufio.NewReaderSize(stdout, 4096)
+	var accumulated []byte
 
 	for {
 		select {
@@ -155,29 +172,24 @@ func playAudioFile(vc *discordgo.VoiceConnection, fileURL string, stopChan chan 
 		default:
 		}
 
-		_, err := io.ReadFull(reader, pcmBuf)
+		data, granulePos, packetEnd, err := readOggPage(reader)
 		if err != nil {
 			break
 		}
 
-		// Convert s16le bytes to []int16
-		pcm := make([]int16, frameSize)
-		for i := range pcm {
-			pcm[i] = int16(binary.LittleEndian.Uint16(pcmBuf[i*2:]))
-		}
+		accumulated = append(accumulated, data...)
 
-		// Encode to Opus
-		n, err := enc.Encode(pcm, opusBuf)
-		if err != nil {
-			continue
-		}
-
-		select {
-		case vc.OpusSend <- opusBuf[:n]:
-		case <-stopChan:
-			return nil
-		case <-time.After(time.Second):
-			return fmt.Errorf("timed out sending opus frame")
+		if packetEnd {
+			if granulePos > 0 {
+				select {
+				case vc.OpusSend <- accumulated:
+				case <-stopChan:
+					return nil
+				case <-time.After(time.Second):
+					return fmt.Errorf("timed out sending opus frame")
+				}
+			}
+			accumulated = nil
 		}
 	}
 
