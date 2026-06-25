@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"sync"
@@ -405,6 +406,7 @@ func (b *Bot) handleVoiceSelect(s *discordgo.Session, i *discordgo.InteractionCr
 		session.PlaybackState = PlaybackStopped
 		session.mu.Unlock()
 		if playErr != nil {
+			log.Printf("playback error: %v", playErr)
 			b.VoiceManager.StopSession(i.GuildID)
 		}
 	}()

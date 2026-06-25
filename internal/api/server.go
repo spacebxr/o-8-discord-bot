@@ -4,11 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"regexp"
 	"runtime/debug"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -836,16 +840,40 @@ func (s *Server) handleRecordingUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "file is required", http.StatusBadRequest)
 		return
 	}
-	defer file.Close()
+
+	tmpFile, err := os.CreateTemp("", "upload-*")
+	if err != nil {
+		http.Error(w, "failed to create temp file", http.StatusInternalServerError)
+		return
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
+
+	written, err := io.Copy(tmpFile, file)
+	if err != nil {
+		http.Error(w, "failed to read uploaded file", http.StatusInternalServerError)
+		return
+	}
+	tmpFile.Close()
+	file.Close()
+
+	duration := getAudioDuration(tmpPath)
+
+	reopen, err := os.Open(tmpPath)
+	if err != nil {
+		http.Error(w, "failed to reopen temp file", http.StatusInternalServerError)
+		return
+	}
+	defer reopen.Close()
 
 	objectName := fmt.Sprintf("recordings/%s", header.Filename)
-	objectKey, err := s.Storage.Upload(context.Background(), objectName, header.Header.Get("Content-Type"), file, header.Size)
+	objectKey, err := s.Storage.Upload(context.Background(), objectName, header.Header.Get("Content-Type"), reopen, written)
 	if err != nil {
 		http.Error(w, "failed to upload file: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	_, err = s.Database.AddAudioRecording(context.Background(), name, objectKey, 0, "dashboard")
+	_, err = s.Database.AddAudioRecording(context.Background(), name, objectKey, duration, "dashboard")
 	if err != nil {
 		http.Error(w, "failed to save recording: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -885,5 +913,25 @@ func (s *Server) handleRecordingDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+}
+
+func getAudioDuration(path string) float64 {
+	cmd := exec.Command("ffprobe",
+		"-v", "error",
+		"-show_entries", "format=duration",
+		"-of", "default=noprint_wrappers=1:nokey=1",
+		path,
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		log.Printf("ffprobe failed for %s: %v", path, err)
+		return 0
+	}
+	d, err := strconv.ParseFloat(strings.TrimSpace(string(out)), 64)
+	if err != nil {
+		log.Printf("ffprobe parse error for %s: %v", path, err)
+		return 0
+	}
+	return d
 }
 
