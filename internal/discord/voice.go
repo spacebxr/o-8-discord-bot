@@ -131,11 +131,13 @@ func playAudioFile(vc *discordgo.VoiceConnection, fileURL string, stopChan chan 
 	// Drain stderr to avoid blocking
 	go io.Copy(io.Discard, stderr)
 
-	// Create Opus encoder: 48000Hz, mono, voice optimized
-	enc, err := opus.NewEncoder(48000, 1, opus.AppVoIP)
+	// Create Opus encoder: 48000Hz, mono, music quality
+	enc, err := opus.NewEncoder(48000, 1, opus.AppAudio)
 	if err != nil {
 		return fmt.Errorf("failed to create opus encoder: %w", err)
 	}
+	enc.SetBitrate(128000)
+	enc.SetComplexity(10)
 
 	// Read PCM and encode to Opus in 20ms frames (960 samples @ 48kHz)
 	const frameSize = 960      // samples per frame (20ms)
