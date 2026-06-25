@@ -56,7 +56,7 @@ func (vm *VoiceManager) StopSession(guildID string) {
 	if s, ok := vm.sessions[guildID]; ok {
 		close(s.stopChan)
 		if s.VoiceConnection != nil {
-			s.VoiceConnection.Disconnect()
+			s.VoiceConnection.Disconnect(context.Background())
 		}
 		delete(vm.sessions, guildID)
 	}
@@ -181,17 +181,15 @@ func playAudioFile(vc *discordgo.VoiceConnection, fileURL string, stopChan chan 
 	return nil
 }
 
-func (b *Bot) joinVoiceChannel(s *discordgo.Session, guildID, channelID string) (*discordgo.VoiceConnection, error) {
+func (b *Bot) joinVoiceChannel(ctx context.Context, s *discordgo.Session, guildID, channelID string) (*discordgo.VoiceConnection, error) {
 	// Leave any existing connection in this guild
 	b.VoiceManager.StopSession(guildID)
 
-	vc, err := s.ChannelVoiceJoin(guildID, channelID, false, false)
+	vc, err := s.ChannelVoiceJoin(ctx, guildID, channelID, false, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to join voice channel: %w", err)
 	}
 
-	// Wait for connection to be ready
-	vc.Ready = true
 	return vc, nil
 }
 
@@ -317,7 +315,7 @@ func (b *Bot) handleVoiceJoin(s *discordgo.Session, i *discordgo.InteractionCrea
 		},
 	})
 
-	vc, err := b.joinVoiceChannel(s, i.GuildID, channelID)
+	vc, err := b.joinVoiceChannel(context.Background(), s, i.GuildID, channelID)
 	if err != nil {
 		s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 			Embeds: &[]*discordgo.MessageEmbed{
@@ -379,7 +377,7 @@ func (b *Bot) handleVoiceSelect(s *discordgo.Session, i *discordgo.InteractionCr
 
 	b.VoiceManager.StopSession(i.GuildID)
 
-	vc, err := b.joinVoiceChannel(s, i.GuildID, channelID)
+	vc, err := b.joinVoiceChannel(context.Background(), s, i.GuildID, channelID)
 	if err != nil {
 		return
 	}
