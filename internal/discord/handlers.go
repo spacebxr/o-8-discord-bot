@@ -95,6 +95,8 @@ func (b *Bot) InteractionCreateHandler(s *discordgo.Session, i *discordgo.Intera
 			b.handleSyncRolesSlash(s, i)
 		case "vc":
 			b.handleVoiceSlash(s, i)
+		case "schedule":
+			b.handleScheduleSlash(s, i)
 		}
 	case discordgo.InteractionMessageComponent:
 		cid := i.MessageComponentData().CustomID
@@ -1490,6 +1492,134 @@ func (b *Bot) handleInfractionHistorySlash(s *discordgo.Session, i *discordgo.In
 					Title:       "Infraction History 📋",
 					Description: fmt.Sprintf("Total recorded infractions: **%d**", len(list)),
 					Color:       0xf23f43,
+					Fields:      fields,
+					Thumbnail: &discordgo.MessageEmbedThumbnail{
+						URL: "https://i.ibb.co/67ZpGxTj/image.png",
+					},
+				},
+			},
+		},
+	})
+}
+
+func (b *Bot) handleScheduleSlash(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	sub := i.ApplicationCommandData().Options[0]
+	switch sub.Name {
+	case "create":
+		b.handleScheduleCreate(s, i, sub)
+	case "list":
+		b.handleScheduleList(s, i)
+	}
+}
+
+func (b *Bot) handleScheduleCreate(s *discordgo.Session, i *discordgo.InteractionCreate, sub *discordgo.ApplicationCommandInteractionDataOption) {
+	var channelID, content string
+	var delay string
+	var repeatUnit string
+	var repeatInterval int
+
+	for _, opt := range sub.Options {
+		switch opt.Name {
+		case "channel":
+			channelID = opt.Value.(string)
+		case "content":
+			content = opt.StringValue()
+		case "delay":
+			delay = opt.StringValue()
+		case "repeat":
+			repeatUnit = opt.StringValue()
+		case "repeat_interval":
+			repeatInterval = int(opt.IntValue())
+		}
+	}
+
+	if channelID == "" || content == "" {
+		b.sendEmbedEphemeral(s, i.Interaction, "Missing Fields", "Channel and content are required.", 0xf23f43)
+		return
+	}
+
+	var scheduledAt time.Time
+	if delay != "" {
+		d, ok := parseDuration(delay)
+		if !ok {
+			b.sendEmbedEphemeral(s, i.Interaction, "Invalid Delay", "Could not parse delay. Use format like `30m`, `2h`, `1d`.", 0xf23f43)
+			return
+		}
+		scheduledAt = time.Now().Add(d)
+	} else {
+		scheduledAt = time.Now().Add(15 * time.Minute)
+	}
+
+	if repeatUnit != "" && repeatInterval == 0 {
+		repeatInterval = 1
+	}
+
+	createdBy := i.Member.User.ID
+
+	_, err := b.DB.CreateScheduledMessage(context.Background(), content, channelID, scheduledAt, repeatInterval, repeatUnit, createdBy)
+	if err != nil {
+		b.sendEmbedEphemeral(s, i.Interaction, "Error", "Failed to schedule message: "+err.Error(), 0xf23f43)
+		return
+	}
+
+	repeatStr := "One-time"
+	if repeatUnit != "" {
+		repeatStr = fmt.Sprintf("Every %d %s", repeatInterval, repeatUnit)
+	}
+
+	b.sendEmbedEphemeral(s, i.Interaction, "Message Scheduled ✅",
+		fmt.Sprintf("**Channel:** <#%s>\n**When:** <t:%d:f>\n**Repeat:** %s\n\n%s", channelID, scheduledAt.Unix(), repeatStr, content),
+		0x43b581)
+}
+
+func (b *Bot) handleScheduleList(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	messages, err := b.DB.GetScheduledMessages(context.Background())
+	if err != nil {
+		b.sendEmbedEphemeral(s, i.Interaction, "Error", "Failed to fetch scheduled messages: "+err.Error(), 0xf23f43)
+		return
+	}
+
+	if len(messages) == 0 {
+		b.sendEmbedEphemeral(s, i.Interaction, "Scheduled Messages", "No scheduled messages found.", 0xfaa61a)
+		return
+	}
+
+	fields := make([]*discordgo.MessageEmbedField, 0, len(messages))
+	for _, m := range messages {
+		statusEmoji := "⏳"
+		switch m.Status {
+		case "sent":
+			statusEmoji = "✅"
+		case "cancelled":
+			statusEmoji = "❌"
+		}
+
+		repeatStr := ""
+		if m.RepeatInterval > 0 {
+			repeatStr = fmt.Sprintf(" 🔄 Every %d %s", m.RepeatInterval, m.RepeatUnit)
+		}
+
+		contentPreview := m.Content
+		if len(contentPreview) > 100 {
+			contentPreview = contentPreview[:100] + "..."
+		}
+
+		fields = append(fields, &discordgo.MessageEmbedField{
+			Name:   fmt.Sprintf("%s <t:%d:f>%s", statusEmoji, m.ScheduledAt.Unix(), repeatStr),
+			Value:  fmt.Sprintf("<#%s> — %s", m.ChannelID, contentPreview),
+			Inline: false,
+		})
+	}
+
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Flags: discordgo.MessageFlagsEphemeral,
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Title:       "Scheduled Messages 📋",
+					Description: fmt.Sprintf("Total: **%d**", len(messages)),
+					Color:       0x5865F2,
 					Fields:      fields,
 					Thumbnail: &discordgo.MessageEmbedThumbnail{
 						URL: "https://i.ibb.co/67ZpGxTj/image.png",

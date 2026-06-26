@@ -267,6 +267,61 @@ func (b *Bot) Start() error {
 			},
 		},
 		{
+			Name:        "schedule",
+			Description: "Schedule messages for later delivery",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Name:        "create",
+					Description: "Create a scheduled message",
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionChannel,
+							Name:        "channel",
+							Description: "The channel to send the message in",
+							Required:    true,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "content",
+							Description: "The message content",
+							Required:    true,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "delay",
+							Description: "When to send (e.g. 30m, 2h, 1d)",
+							Required:    false,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "repeat",
+							Description: "How often to repeat",
+							Required:    false,
+							Choices: []*discordgo.ApplicationCommandOptionChoice{
+								{Name: "Minutes", Value: "minutes"},
+								{Name: "Hours", Value: "hours"},
+								{Name: "Days", Value: "days"},
+								{Name: "Weeks", Value: "weeks"},
+								{Name: "Months", Value: "months"},
+							},
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionInteger,
+							Name:        "repeat_interval",
+							Description: "Repeat interval (default: 1)",
+							Required:    false,
+						},
+					},
+				},
+				{
+					Name:        "list",
+					Description: "List upcoming scheduled messages",
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+				},
+			},
+		},
+		{
 			Name:        "announce",
 			Description: "Make an announcement",
 			Options: []*discordgo.ApplicationCommandOption{
