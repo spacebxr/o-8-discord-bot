@@ -210,6 +210,30 @@ func (b *Bot) Start() error {
 			},
 		},
 		{
+			Name:        "changecn",
+			Description: "Change a user's codename (CN)",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionUser,
+					Name:        "user",
+					Description: "The user whose codename to change",
+					Required:    true,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "codename",
+					Description: "The new codename",
+					Required:    true,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "roblox_username",
+					Description: "The user's Roblox username",
+					Required:    false,
+				},
+			},
+		},
+		{
 			Name:        "afk",
 			Description: "Set your AFK status",
 			Options: []*discordgo.ApplicationCommandOption{

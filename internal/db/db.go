@@ -94,6 +94,23 @@ func (db *Database) InsertCodenameRequest(ctx context.Context, discordID, roblox
 	return id, err
 }
 
+func (db *Database) UpsertCodename(ctx context.Context, discordID, robloxUsername, codename string) error {
+	var existingID string
+	err := db.Pool.QueryRow(ctx, "SELECT id FROM codenames WHERE discord_id = $1 LIMIT 1", discordID).Scan(&existingID)
+	if err == nil {
+		_, err = db.Pool.Exec(ctx,
+			"UPDATE codenames SET codename = $1, roblox_username = $2, status = 'approved' WHERE id = $3",
+			codename, robloxUsername, existingID,
+		)
+		return err
+	}
+	_, err = db.Pool.Exec(ctx,
+		"INSERT INTO codenames (discord_id, roblox_username, codename, status) VALUES ($1, $2, $3, 'approved')",
+		discordID, robloxUsername, codename,
+	)
+	return err
+}
+
 func (db *Database) UpdateCodenameStatus(ctx context.Context, requestID, status string) (string, string, error) {
 	var discordID, codename string
 	err := db.Pool.QueryRow(ctx, "UPDATE codenames SET status = $1 WHERE id = $2 RETURNING discord_id, codename", status, requestID).Scan(&discordID, &codename)

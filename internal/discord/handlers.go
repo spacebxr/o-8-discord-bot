@@ -84,6 +84,8 @@ func (b *Bot) InteractionCreateHandler(s *discordgo.Session, i *discordgo.Intera
 			b.handleStopwatchSlash(s, i)
 		case "requestcn":
 			b.handleRequestCNSlash(s, i)
+		case "changecn":
+			b.handleChangeCNSlash(s, i)
 		case "afk":
 			b.handleAFKSlash(s, i)
 		case "announce":
@@ -752,6 +754,106 @@ func (b *Bot) handleRequestCNSlash(s *discordgo.Session, i *discordgo.Interactio
 							Style:    discordgo.DangerButton,
 							CustomID: "cn_reject_" + reqID,
 						},
+					},
+				},
+			},
+		},
+	})
+}
+
+func (b *Bot) handleChangeCNSlash(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	if !b.hasAccess(i.Member, b.RoleHighCommand) {
+		b.sendEmbedEphemeral(s, i.Interaction, "Access Denied 🚫", "You do not have the required high command role to change codenames.", 0xf23f43)
+		return
+	}
+
+	options := i.ApplicationCommandData().Options
+	var targetUser *discordgo.User
+	var codename string
+	var robloxUsername string
+
+	for _, opt := range options {
+		switch opt.Name {
+		case "user":
+			targetUser = opt.UserValue(s)
+		case "codename":
+			codename = opt.StringValue()
+		case "roblox_username":
+			robloxUsername = opt.StringValue()
+		}
+	}
+
+	taken, err := b.DB.IsCodenameTaken(context.Background(), codename)
+	if err != nil {
+		b.sendEmbedEphemeral(s, i.Interaction, "Database Error ❌", "An error occurred while checking if the codename was taken.", 0xf23f43)
+		return
+	}
+	if taken {
+		b.sendEmbedEphemeral(s, i.Interaction, "Codename Unavailable ⚠️", fmt.Sprintf("The codename **%s** is already taken by an approved user. Please choose a different codename.", codename), 0xf23f43)
+		return
+	}
+
+	err = b.DB.UpsertCodename(context.Background(), targetUser.ID, robloxUsername, codename)
+	if err != nil {
+		b.sendEmbedEphemeral(s, i.Interaction, "Database Error ❌", "Failed to save codename.", 0xf23f43)
+		return
+	}
+
+	prefix := "[LR]"
+	member, err := s.GuildMember(i.GuildID, targetUser.ID)
+	if err == nil {
+		guildRoles, err := s.GuildRoles(i.GuildID)
+		if err == nil {
+			var factionRepRoleID string
+			for _, r := range guildRoles {
+				if r.Name == "Faction Representative" {
+					factionRepRoleID = r.ID
+					break
+				}
+			}
+			if factionRepRoleID != "" {
+				for _, rID := range member.Roles {
+					if rID == factionRepRoleID {
+						prefix = "[FR]"
+						break
+					}
+				}
+			}
+		}
+	}
+
+	codenameClean := strings.Trim(codename, "\"")
+	if len(codenameClean) > 25 {
+		codenameClean = codenameClean[:25]
+	}
+	nickname := fmt.Sprintf("%s \"%s\"", prefix, codenameClean)
+	nickErr := s.GuildMemberNickname(i.GuildID, targetUser.ID, nickname)
+
+	description := fmt.Sprintf("Changed <@%s>'s codename to **%s**.", targetUser.ID, codename)
+	if robloxUsername != "" {
+		description += fmt.Sprintf("\n**Roblox Username:** %s", robloxUsername)
+	}
+	description += fmt.Sprintf("\n\n**Action by:** <@%s>", i.Member.User.ID)
+
+	if nickErr != nil {
+		if strings.Contains(nickErr.Error(), "50013") || strings.Contains(nickErr.Error(), "Missing Permissions") || strings.Contains(nickErr.Error(), "403") {
+			description += "\n\n⚠️ **Nickname Sync Notice:** The bot was unable to change this member's server nickname. This happens if the member is the Server Owner or has a higher role than the bot. To fix this, drag the bot's role higher in Server Settings."
+		} else {
+			description += fmt.Sprintf("\n\n⚠️ **Failed to change nickname:** %v", nickErr)
+		}
+	}
+
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: fmt.Sprintf("<@%s>", targetUser.ID),
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Title:       "Codename Changed ✅",
+					Description: description,
+					Color:       0x23a559,
+					Thumbnail: &discordgo.MessageEmbedThumbnail{
+						URL: "https://i.ibb.co/67ZpGxTj/image.png",
 					},
 				},
 			},
