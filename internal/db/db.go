@@ -532,3 +532,85 @@ func (db *Database) GetAudioRecordingByID(ctx context.Context, id string) (*Audi
 	}
 	return &r, nil
 }
+
+type ScheduledMessage struct {
+	ID             string    `json:"id"`
+	Content        string    `json:"content"`
+	ChannelID      string    `json:"channelId"`
+	ScheduledAt    time.Time `json:"scheduledAt"`
+	RepeatInterval int       `json:"repeatInterval"`
+	RepeatUnit     string    `json:"repeatUnit"`
+	Status         string    `json:"status"`
+	CreatedBy      string    `json:"createdBy"`
+	CreatedAt      time.Time `json:"createdAt"`
+}
+
+func (db *Database) CreateScheduledMessage(ctx context.Context, content, channelID string, scheduledAt time.Time, repeatInterval int, repeatUnit, createdBy string) (string, error) {
+	var id string
+	err := db.Pool.QueryRow(ctx,
+		`INSERT INTO scheduled_messages (content, channel_id, scheduled_at, repeat_interval, repeat_unit, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+		content, channelID, scheduledAt, repeatInterval, repeatUnit, createdBy,
+	).Scan(&id)
+	return id, err
+}
+
+func (db *Database) GetScheduledMessages(ctx context.Context) ([]ScheduledMessage, error) {
+	rows, err := db.Pool.Query(ctx,
+		`SELECT id, content, channel_id, scheduled_at, repeat_interval, repeat_unit, status, created_by, created_at
+		 FROM scheduled_messages ORDER BY scheduled_at DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []ScheduledMessage
+	for rows.Next() {
+		var m ScheduledMessage
+		if err := rows.Scan(&m.ID, &m.Content, &m.ChannelID, &m.ScheduledAt, &m.RepeatInterval, &m.RepeatUnit, &m.Status, &m.CreatedBy, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, m)
+	}
+	if list == nil {
+		list = []ScheduledMessage{}
+	}
+	return list, nil
+}
+
+func (db *Database) GetPendingScheduledMessages(ctx context.Context) ([]ScheduledMessage, error) {
+	rows, err := db.Pool.Query(ctx,
+		`SELECT id, content, channel_id, scheduled_at, repeat_interval, repeat_unit, status, created_by, created_at
+		 FROM scheduled_messages WHERE status = 'pending' AND scheduled_at <= NOW()
+		 ORDER BY scheduled_at ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []ScheduledMessage
+	for rows.Next() {
+		var m ScheduledMessage
+		if err := rows.Scan(&m.ID, &m.Content, &m.ChannelID, &m.ScheduledAt, &m.RepeatInterval, &m.RepeatUnit, &m.Status, &m.CreatedBy, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, m)
+	}
+	if list == nil {
+		list = []ScheduledMessage{}
+	}
+	return list, nil
+}
+
+func (db *Database) UpdateScheduledMessageStatus(ctx context.Context, id, status string) error {
+	_, err := db.Pool.Exec(ctx,
+		`UPDATE scheduled_messages SET status = $1 WHERE id = $2`,
+		status, id,
+	)
+	return err
+}
+
+func (db *Database) DeleteScheduledMessage(ctx context.Context, id string) error {
+	_, err := db.Pool.Exec(ctx, `DELETE FROM scheduled_messages WHERE id = $1`, id)
+	return err
+}

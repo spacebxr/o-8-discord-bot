@@ -56,6 +56,10 @@ func (s *Server) Start(port string) error {
 	mux.HandleFunc("/api/recordings", s.handleRecordings)
 	mux.HandleFunc("/api/recordings/upload", s.handleRecordingUpload)
 	mux.HandleFunc("/api/recordings/delete", s.handleRecordingDelete)
+	mux.HandleFunc("/api/scheduled-messages", s.handleGetScheduledMessages)
+	mux.HandleFunc("/api/scheduled-messages/create", s.handleCreateScheduledMessage)
+	mux.HandleFunc("/api/scheduled-messages/delete", s.handleDeleteScheduledMessage)
+	mux.HandleFunc("/api/channels", s.handleGetChannels)
 
 	distPath := "dashboard/dist"
 	if _, err := os.Stat(distPath); err != nil {
@@ -933,5 +937,163 @@ func getAudioDuration(path string) float64 {
 		return 0
 	}
 	return d
+}
+
+func (s *Server) handleGetScheduledMessages(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != "GET" {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	messages, err := s.Database.GetScheduledMessages(context.Background())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	channels, _ := s.Session.GuildChannels(s.GuildID)
+	chanMap := make(map[string]string)
+	for _, ch := range channels {
+		chanMap[ch.ID] = ch.Name
+	}
+
+	type messageResponse struct {
+		db.ScheduledMessage
+		ChannelName string `json:"channelName"`
+	}
+
+	resp := make([]messageResponse, 0, len(messages))
+	for _, m := range messages {
+		resp = append(resp, messageResponse{
+			ScheduledMessage: m,
+			ChannelName:      chanMap[m.ChannelID],
+		})
+	}
+
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) handleCreateScheduledMessage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != "POST" {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var body struct {
+		Content        string `json:"content"`
+		ChannelID      string `json:"channelId"`
+		ScheduledAt    string `json:"scheduledAt"`
+		RepeatInterval int    `json:"repeatInterval"`
+		RepeatUnit     string `json:"repeatUnit"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+
+	if body.Content == "" || body.ChannelID == "" || body.ScheduledAt == "" {
+		http.Error(w, "content, channelId, and scheduledAt are required", http.StatusBadRequest)
+		return
+	}
+
+	scheduledAt, err := time.Parse(time.RFC3339, body.ScheduledAt)
+	if err != nil {
+		http.Error(w, "invalid scheduledAt: use RFC3339 format (2006-01-02T15:04:05Z)", http.StatusBadRequest)
+		return
+	}
+
+	id, err := s.Database.CreateScheduledMessage(context.Background(), body.Content, body.ChannelID, scheduledAt, body.RepeatInterval, body.RepeatUnit, "dashboard")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]string{"id": id})
+}
+
+func (s *Server) handleDeleteScheduledMessage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != "POST" {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var body struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.ID == "" {
+		http.Error(w, "id is required", http.StatusBadRequest)
+		return
+	}
+
+	err := s.Database.DeleteScheduledMessage(context.Background(), body.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+}
+
+func (s *Server) handleGetChannels(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != "GET" {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	channels, err := s.Session.GuildChannels(s.GuildID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	type channelItem struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+
+	result := make([]channelItem, 0)
+	for _, ch := range channels {
+		if ch.Type == discordgo.ChannelTypeGuildText {
+			result = append(result, channelItem{ID: ch.ID, Name: ch.Name})
+		}
+	}
+
+	json.NewEncoder(w).Encode(result)
 }
 

@@ -3,6 +3,7 @@ package discord
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -1721,4 +1722,55 @@ func (b *Bot) handleSyncRolesSlash(s *discordgo.Session, i *discordgo.Interactio
 	_, _ = s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
 		Embeds: &[]*discordgo.MessageEmbed{embed},
 	})
+}
+
+func (b *Bot) startScheduledMessageChecker() {
+	ticker := time.NewTicker(30 * time.Second)
+	for range ticker.C {
+		b.sendScheduledMessages()
+	}
+}
+
+func nextOccurrence(from time.Time, interval int, unit string) time.Time {
+	switch unit {
+	case "minutes":
+		return from.Add(time.Duration(interval) * time.Minute)
+	case "hours":
+		return from.Add(time.Duration(interval) * time.Hour)
+	case "days":
+		return from.AddDate(0, 0, interval)
+	case "weeks":
+		return from.AddDate(0, 0, interval*7)
+	case "months":
+		return from.AddDate(0, interval, 0)
+	default:
+		return from
+	}
+}
+
+func (b *Bot) sendScheduledMessages() {
+	ctx := context.Background()
+	messages, err := b.DB.GetPendingScheduledMessages(ctx)
+	if err != nil {
+		log.Printf("scheduled messages: get pending: %v", err)
+		return
+	}
+	for _, m := range messages {
+		_, err := b.Session.ChannelMessageSend(m.ChannelID, m.Content)
+		if err != nil {
+			log.Printf("scheduled messages: send %s: %v", m.ID, err)
+			b.DB.UpdateScheduledMessageStatus(ctx, m.ID, "cancelled")
+			continue
+		}
+
+		if m.RepeatInterval > 0 {
+			next := nextOccurrence(m.ScheduledAt, m.RepeatInterval, m.RepeatUnit)
+			_, err := b.DB.CreateScheduledMessage(ctx, m.Content, m.ChannelID, next, m.RepeatInterval, m.RepeatUnit, m.CreatedBy)
+			if err != nil {
+				log.Printf("scheduled messages: create recurrence for %s: %v", m.ID, err)
+			}
+		}
+
+		b.DB.UpdateScheduledMessageStatus(ctx, m.ID, "sent")
+	}
 }
