@@ -235,6 +235,14 @@ func (db *Database) UpsertUserRoles(ctx context.Context, userID string, roleIDs 
 	return err
 }
 
+func (db *Database) EnsurePersonnelStat(ctx context.Context, userID string) error {
+	_, err := db.Pool.Exec(ctx,
+		"INSERT INTO personnel_stats (user_id, total_messages, deployments_participated) VALUES ($1, 0, 0) ON CONFLICT (user_id) DO NOTHING",
+		userID,
+	)
+	return err
+}
+
 func (db *Database) LogUserMessage(ctx context.Context, userID string) error {
 	_, err := db.Pool.Exec(ctx,
 		"INSERT INTO personnel_stats (user_id, total_messages, last_message_at) VALUES ($1, 1, now()) ON CONFLICT (user_id) DO UPDATE SET total_messages = personnel_stats.total_messages + 1, last_message_at = now()",

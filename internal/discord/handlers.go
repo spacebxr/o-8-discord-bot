@@ -1537,6 +1537,37 @@ func (b *Bot) startExpiryChecker() {
 	}
 }
 
+func (b *Bot) startPersonnelSync() {
+	b.syncPersonnel()
+	ticker := time.NewTicker(1 * time.Hour)
+	for range ticker.C {
+		b.syncPersonnel()
+	}
+}
+
+func (b *Bot) syncPersonnel() {
+	ctx := context.Background()
+	var after string
+	for {
+		members, err := b.Session.GuildMembers(b.GuildID, after, 1000)
+		if err != nil {
+			return
+		}
+		if len(members) == 0 {
+			break
+		}
+		for _, member := range members {
+			if member.User != nil {
+				_ = b.DB.EnsurePersonnelStat(ctx, member.User.ID)
+			}
+		}
+		after = members[len(members)-1].User.ID
+		if len(members) < 1000 {
+			break
+		}
+	}
+}
+
 func (b *Bot) checkExpiredLeaves() {
 	ctx := context.Background()
 	expired, err := b.DB.GetExpiredLeaves(ctx)

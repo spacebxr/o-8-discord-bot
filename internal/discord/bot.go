@@ -324,6 +324,7 @@ func (b *Bot) Start() error {
 	}
 
 	go b.startExpiryChecker()
+	go b.startPersonnelSync()
 
 	return nil
 }
