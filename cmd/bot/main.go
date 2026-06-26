@@ -23,9 +23,17 @@ func main() {
 	guildID := os.Getenv("GUILD_ID")
 	roleHighCommand := os.Getenv("ROLE_HIGH_COMMAND")
 	roleDevTeam := os.Getenv("ROLE_DEV_TEAM")
+	discordClientID := os.Getenv("DISCORD_CLIENT_ID")
+	discordClientSecret := os.Getenv("DISCORD_CLIENT_SECRET")
+	discordRedirectURI := os.Getenv("DISCORD_REDIRECT_URI")
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = api.GenerateJWTSecret()
+		log.Println("JWT_SECRET not set, generated random secret")
+	}
 
-	if dbURL == "" || token == "" || guildID == "" || roleHighCommand == "" || roleDevTeam == "" {
-		log.Fatal("Missing required environment variables")
+	if discordClientID == "" || discordClientSecret == "" || discordRedirectURI == "" {
+		log.Fatal("Missing Discord OAuth environment variables (DISCORD_CLIENT_ID, DISCORD_CLIENT_SECRET, DISCORD_REDIRECT_URI)")
 	}
 
 	database, err := db.Connect(context.Background(), dbURL)
@@ -56,10 +64,14 @@ func main() {
 	}
 
 	apiServer := &api.Server{
-		Database: database,
-		Session:  bot.Session,
-		GuildID:  guildID,
-		Storage:  storageClient,
+		Database:           database,
+		Session:            bot.Session,
+		GuildID:            guildID,
+		Storage:            storageClient,
+		DiscordClientID:    discordClientID,
+		DiscordClientSecret: discordClientSecret,
+		DiscordRedirectURI: discordRedirectURI,
+		JWTSecret:          jwtSecret,
 	}
 	go func() {
 		fmt.Println("Starting API server on :" + apiPort)

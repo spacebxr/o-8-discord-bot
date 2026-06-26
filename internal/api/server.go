@@ -21,10 +21,14 @@ import (
 )
 
 type Server struct {
-	Database *db.Database
-	Session  *discordgo.Session
-	GuildID  string
-	Storage *storage.Client
+	Database           *db.Database
+	Session            *discordgo.Session
+	GuildID            string
+	Storage            *storage.Client
+	JWTSecret          string
+	DiscordClientID    string
+	DiscordClientSecret string
+	DiscordRedirectURI string
 }
 
 type Strike struct {
@@ -60,6 +64,10 @@ func (s *Server) Start(port string) error {
 	mux.HandleFunc("/api/scheduled-messages/create", s.handleCreateScheduledMessage)
 	mux.HandleFunc("/api/scheduled-messages/delete", s.handleDeleteScheduledMessage)
 	mux.HandleFunc("/api/channels", s.handleGetChannels)
+	mux.HandleFunc("/api/auth/discord", s.handleAuthDiscord)
+	mux.HandleFunc("/api/auth/discord/callback", s.handleAuthCallback)
+	mux.HandleFunc("/api/auth/me", s.handleAuthMe)
+	mux.HandleFunc("/api/auth/logout", s.handleAuthLogout)
 
 	distPath := "dashboard/dist"
 	if _, err := os.Stat(distPath); err != nil {
